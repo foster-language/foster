@@ -1,229 +1,512 @@
-use super::*;
+//! Definition locations, symbol references, and versioned rename edits.
+use super::Workspace;
+use super::semantic::{SymbolIdentity, imported_declarations, self_type_owner_at, symbol_at};
+use super::source::{
+    find_name, identifier_at, is_ident, module_for_uri, path_to_uri, qualifier_before,
+};
+use crate::lsp::byte_range_to_lsp;
+use lsp_types::{
+    DocumentChanges, Location, OneOf, OptionalVersionedTextDocumentIdentifier, ReferenceParams,
+    RenameParams, TextDocumentEdit, TextDocumentPositionParams, TextEdit, Uri, WorkspaceEdit,
+};
 
 impl Workspace {
-    pub(in crate::lsp) fn formatting(
+    pub(in crate::lsp) fn definition(
         &self,
-        params: &lsp_types::DocumentFormattingParams,
-    ) -> Result<Vec<TextEdit>, crate::error::FosterError> {
-        let uri = &params.text_document.uri;
-        let source = if let Some(document) = self.documents.get(uri) {
-            document.text.clone()
-        } else {
-            let path = uri_to_path(uri).ok_or_else(|| {
-                crate::error::FosterError::runtime("formatting requires a file URI")
-            })?;
-            std::fs::read_to_string(path).map_err(|error| {
-                crate::error::FosterError::runtime(format!("cannot read document: {error}"))
-            })?
-        };
-        // Foster has one canonical formatter and indentation policy. The editor's
-        // tab settings do not override the output of `foster fmt`.
-        let formatted = crate::formatter::format(&source)?;
-        Ok(format_edits(&source, &formatted))
-    }
+        params: &TextDocumentPositionParams,
+    ) -> Option<Location> {
+        let compilation = self.semantic_compilation_for(&params.text_document.uri)?;
+        let module_id = module_for_uri(&compilation, &params.text_document.uri)?;
+        let module = &compilation.hir.modules[module_id];
+        let snapshot = self.semantic_snapshot(&compilation, &params.text_document.uri)?;
+        let source = snapshot.semantic_source();
+        let offset = snapshot.current_position_to_semantic_offset(params.position)?;
+        let location = (|| {
+            if let Some(symbol) = symbol_at(&compilation, module_id, source, offset)
+                && let Some(location) = symbol_declaration(&compilation, symbol)
+            {
+                return Some(location);
+            }
+            let (name, name_start) = identifier_at(source, offset)?;
+            let qualifier = qualifier_before(source, name_start);
+            if qualifier.is_none()
+                && name == "Self"
+                && let Some(symbol) = self_type_owner_at(&compilation, module_id, offset)
+            {
+                return symbol_declaration(&compilation, symbol);
+            }
 
-    pub(in crate::lsp) fn workspace_symbols(
-        &self,
-        query: &str,
-    ) -> Vec<lsp_types::SymbolInformation> {
-        let files = std::sync::Arc::clone(&self.compilations.symbol_files.borrow());
-        let mut symbols = Vec::new();
-        for (uri, entries) in files.iter() {
-            if crate::compiler::cancellation::is_cancelled() {
-                return Vec::new();
+            if qualifier.is_none() && name == "CodePoint" {
+                return embedded_module_location("core.code_point");
             }
-            if !self.documents.contains_key(uri) {
-                symbols.extend(entries.iter().filter_map(|symbol| {
-                    Some((super::super::symbols::rank(symbol, query)?, symbol.clone()))
-                }));
+
+            if qualifier.is_none()
+                && let Some((function_id, function)) =
+                    compilation.hir.functions.iter().find(|(_, function)| {
+                        function.module == module_id
+                            && function.span.start <= offset
+                            && offset <= function.span.end
+                    })
+                && let Some((_, local)) = compilation
+                    .hir
+                    .locals
+                    .iter()
+                    .find(|(_, local)| local.function == function_id && local.name == name)
+            {
+                let span = find_name(source, function.span.clone(), &local.name)
+                    .unwrap_or_else(|| local.span.clone());
+                return Some(Location::new(
+                    params.text_document.uri.clone(),
+                    byte_range_to_lsp(source, span),
+                ));
             }
-        }
-        // The overlay entirely replaces its disk entry, including deleted or
-        // malformed declarations. Search never resurrects stale source positions.
-        for (uri, document) in &self.documents {
-            if crate::compiler::cancellation::is_cancelled() {
-                return Vec::new();
+
+            let target_module = qualifier
+                .as_deref()
+                .and_then(|qualifier| module.imports.get(qualifier).copied())
+                .unwrap_or(module_id);
+            if qualifier.is_none()
+                && let Some(import) = module
+                    .imports_with_spans
+                    .iter()
+                    .find(|import| import.item_name.is_none() && import.name == name)
+            {
+                return module_location(&compilation, import.target);
             }
-            symbols.extend(
-                super::super::symbols::source_symbols(uri, &document.text)
+            definition_in_module(&compilation, target_module, name).or_else(|| {
+                imported_declarations(&compilation, module_id, name)
                     .into_iter()
-                    .filter_map(|symbol| {
-                        Some((super::super::symbols::rank(&symbol, query)?, symbol))
-                    }),
-            );
+                    .find_map(|(target, actual)| {
+                        definition_in_module(&compilation, target, &actual)
+                    })
+            })
+        })()?;
+        self.remap_semantic_location(&compilation, location)
+    }
+
+    pub(in crate::lsp) fn references(&self, params: &ReferenceParams) -> Option<Vec<Location>> {
+        let position = &params.text_document_position;
+        let compilation = self.semantic_compilation_for(&position.text_document.uri)?;
+        let module = module_for_uri(&compilation, &position.text_document.uri)?;
+        let snapshot = self.semantic_snapshot(&compilation, &position.text_document.uri)?;
+        let source = snapshot.semantic_source();
+        let offset = snapshot.current_position_to_semantic_offset(position.position)?;
+        let symbol = symbol_at(&compilation, module, source, offset)?;
+        let mut locations = symbol_locations(&compilation, symbol);
+        if !params.context.include_declaration {
+            let declaration = symbol_declaration(&compilation, symbol);
+            locations.retain(|location| Some(location) != declaration.as_ref());
         }
-        symbols.sort_by(|(left_rank, left), (right_rank, right)| {
-            left_rank
-                .cmp(right_rank)
-                .then_with(|| left.name.cmp(&right.name))
-                .then_with(|| left.location.uri.as_str().cmp(right.location.uri.as_str()))
-                .then_with(|| left.location.range.start.cmp(&right.location.range.start))
-        });
-        symbols.dedup_by(|(_, left), (_, right)| {
-            left.name == right.name && left.location == right.location
-        });
-        symbols
-            .into_iter()
-            .take(256)
-            .map(|(_, symbol)| symbol)
-            .collect()
+        Some(
+            locations
+                .into_iter()
+                .filter_map(|location| self.remap_semantic_location(&compilation, location))
+                .collect(),
+        )
+    }
+
+    pub(in crate::lsp) fn rename(&self, params: &RenameParams) -> Option<WorkspaceEdit> {
+        if !valid_identifier(&params.new_name) {
+            return None;
+        }
+        let position = &params.text_document_position;
+        let compilation = if self.compilations.snapshot_only {
+            // Edits require a current package, even for a local rename.
+            self.compile_for(&position.text_document.uri).ok()?
+        } else {
+            self.semantic_compilation_for(&position.text_document.uri)?
+        };
+        let module = module_for_uri(&compilation, &position.text_document.uri)?;
+        let snapshot = self.semantic_snapshot(&compilation, &position.text_document.uri)?;
+        let source = snapshot.semantic_source();
+        let offset = snapshot.current_position_to_semantic_offset(position.position)?;
+        let symbol = symbol_at(&compilation, module, source, offset)?;
+        if matches!(symbol, SymbolIdentity::Builtin(_)) {
+            return None;
+        }
+        if params.new_name == "Self"
+            && matches!(
+                symbol,
+                SymbolIdentity::Record(_) | SymbolIdentity::Variant(_)
+            )
+        {
+            return None;
+        }
+        if !matches!(symbol, SymbolIdentity::Local(_))
+            && !self.compilation_sources_are_current(&compilation)
+        {
+            return None;
+        }
+        let shorthand = match symbol {
+            SymbolIdentity::Local(local) => record_shorthand_spans(&compilation, local),
+            _ => Vec::new(),
+        };
+        let mut grouped = std::collections::BTreeMap::<String, (Uri, Vec<TextEdit>)>::new();
+        for semantic_location in symbol_locations(&compilation, symbol) {
+            let new_text = if shorthand
+                .iter()
+                .any(|range| byte_range_to_lsp(source, range.clone()) == semantic_location.range)
+            {
+                let SymbolIdentity::Local(local) = symbol else {
+                    unreachable!()
+                };
+                format!(
+                    "{}: {}",
+                    compilation.hir.locals[local].name, params.new_name
+                )
+            } else {
+                params.new_name.clone()
+            };
+            let Some(location) = self.remap_semantic_location(&compilation, semantic_location)
+            else {
+                continue;
+            };
+            grouped
+                .entry(location.uri.as_str().to_owned())
+                .or_insert_with(|| (location.uri.clone(), Vec::new()))
+                .1
+                .push(TextEdit {
+                    range: location.range,
+                    new_text,
+                });
+        }
+        let edits = grouped
+            .into_values()
+            .map(|(uri, edits)| TextDocumentEdit {
+                text_document: OptionalVersionedTextDocumentIdentifier {
+                    version: self.version(&uri),
+                    uri,
+                },
+                edits: edits.into_iter().map(OneOf::Left).collect(),
+            })
+            .collect();
+        Some(WorkspaceEdit {
+            changes: None,
+            document_changes: Some(DocumentChanges::Edits(edits)),
+            change_annotations: None,
+        })
     }
 }
 
-fn format_edits(source: &str, formatted: &str) -> Vec<TextEdit> {
-    let before = source.split_inclusive('\n').collect::<Vec<_>>();
-    let after = formatted.split_inclusive('\n').collect::<Vec<_>>();
-    if before.len() == after.len() {
-        let mut offset = 0;
-        let mut edits = Vec::new();
-        for (before, after) in before.into_iter().zip(after) {
-            if let Some(edit) = changed_text(source, offset, before, after) {
-                edits.push(edit);
+// A renamed shorthand local must retain the stored field's name.
+fn record_shorthand_spans(
+    compilation: &crate::compiler::RecoveryCompilation,
+    local: crate::hir::LocalId,
+) -> Vec<std::ops::Range<usize>> {
+    use crate::hir::{self, visit::Visitor};
+    struct Find {
+        local: hir::LocalId,
+        spans: Vec<std::ops::Range<usize>>,
+    }
+    impl Find {
+        fn pattern(&mut self, hir: &hir::PackageHir, pattern: &hir::Pattern) {
+            match pattern.unspanned() {
+                hir::Pattern::Record { fields } => {
+                    for (name, pattern) in fields {
+                        if matches!(pattern.unspanned(), hir::Pattern::Binding(local) if *local == self.local)
+                            && name == &hir.locals[self.local].name
+                            && let Some(span) = pattern.span()
+                        {
+                            self.spans.push(span);
+                        }
+                        self.pattern(hir, pattern);
+                    }
+                }
+                hir::Pattern::Variant { fields, .. } => {
+                    for pattern in fields {
+                        self.pattern(hir, pattern);
+                    }
+                }
+                _ => {}
             }
-            offset += before.len();
         }
-        edits
-    } else {
-        changed_text(source, 0, source, formatted)
-            .into_iter()
-            .collect()
+    }
+    impl Visitor for Find {
+        fn visit_statement(&mut self, hir: &hir::PackageHir, statement: &hir::Stmt) {
+            if let hir::Stmt::Destructure { pattern, .. } = statement {
+                self.pattern(hir, pattern);
+            }
+            hir::visit::walk_statement(self, hir, statement);
+        }
+        fn visit_expression(&mut self, hir: &hir::PackageHir, expression: hir::ExprId) {
+            match &hir.expressions[expression] {
+                hir::Expr::Branch { arms, .. } => {
+                    for arm in arms {
+                        if let hir::BranchTest::Pattern(pattern) = &arm.test {
+                            self.pattern(hir, pattern);
+                        }
+                    }
+                }
+                hir::Expr::Record { fields, .. } => {
+                    for (name, value) in fields {
+                        if matches!(hir.expressions[*value], hir::Expr::Name(hir::ResolvedName::Local(local)) if local == self.local)
+                            && name == &hir.locals[self.local].name
+                            && let Some(span) = hir.expression_spans.get(value)
+                        {
+                            self.spans.push(span.clone());
+                        }
+                    }
+                }
+                _ => {}
+            }
+            hir::visit::walk_expression(self, hir, expression);
+        }
+    }
+    let function = &compilation.hir.functions[compilation.hir.locals[local].function];
+    let mut find = Find {
+        local,
+        spans: Vec::new(),
+    };
+    find.visit_block(&compilation.hir, &function.body);
+    let Some(source) = compilation
+        .package
+        .module(&compilation.hir.modules[function.module].name)
+        .and_then(|module| module.source.as_deref())
+    else {
+        return Vec::new();
+    };
+    let Ok(tokens) = crate::lexer::lex(source) else {
+        return Vec::new();
+    };
+    find.spans.retain(|span| {
+        source.get(span.clone()) == Some(compilation.hir.locals[local].name.as_str())
+            && tokens
+                .iter()
+                .rev()
+                .find(|token| {
+                    token.range.end <= span.start
+                        && !matches!(token.kind, crate::lexer::TokenKind::Newline)
+                })
+                .is_some_and(|token| {
+                    matches!(
+                        token.kind,
+                        crate::lexer::TokenKind::LBrace | crate::lexer::TokenKind::Comma
+                    )
+                })
+    });
+    find.spans
+}
+
+fn symbol_locations(
+    compilation: &crate::compiler::RecoveryCompilation,
+    symbol: SymbolIdentity,
+) -> Vec<Location> {
+    let mut locations = Vec::new();
+    for (module_id, module) in compilation.hir.modules.iter() {
+        let Some(path) = module.source_path.as_deref() else {
+            continue;
+        };
+        let Some(source) = compilation
+            .package
+            .module(&module.name)
+            .and_then(|module| module.source.as_deref())
+        else {
+            continue;
+        };
+        let Some(uri) = path_to_uri(path.as_std_path()) else {
+            continue;
+        };
+        let name = symbol_name(compilation, symbol);
+        let source_name = name.rsplit('.').next().unwrap_or(name).to_owned();
+        let ranges = identifier_ranges(source, &source_name).collect::<Vec<_>>();
+        for range in ranges {
+            let lookup_offset = source_name
+                .rsplit_once('.')
+                .map_or(range.start, |(_, member)| range.end - member.len());
+            if symbol_at(compilation, module_id, source, lookup_offset) == Some(symbol) {
+                let location_range = source_name
+                    .rsplit_once('.')
+                    .map_or(range.clone(), |(_, member)| {
+                        range.end - member.len()..range.end
+                    });
+                locations.push(Location::new(
+                    uri.clone(),
+                    byte_range_to_lsp(source, location_range),
+                ));
+            }
+        }
+    }
+    locations
+}
+
+fn symbol_name(compilation: &crate::compiler::RecoveryCompilation, symbol: SymbolIdentity) -> &str {
+    match symbol {
+        SymbolIdentity::Local(local) => &compilation.hir.locals[local].name,
+        SymbolIdentity::Constant(constant) => &compilation.hir.constants[constant].name,
+        SymbolIdentity::Function(function) => &compilation.hir.functions[function].name,
+        SymbolIdentity::Record(record) => &compilation.hir.records[record].name,
+        SymbolIdentity::RequiredMethod(record, method) => {
+            &compilation.hir.records[record].methods[method].name
+        }
+        SymbolIdentity::Variant(variant) => &compilation.hir.variant_types[variant].name,
+        SymbolIdentity::Builtin(builtin) => crate::lsp::builtins::info(builtin).name,
     }
 }
 
-fn changed_text(source: &str, offset: usize, before: &str, after: &str) -> Option<TextEdit> {
-    if before == after {
-        return None;
+pub(super) fn symbol_declaration(
+    compilation: &crate::compiler::RecoveryCompilation,
+    symbol: SymbolIdentity,
+) -> Option<Location> {
+    match symbol {
+        SymbolIdentity::Local(local) => {
+            let definition = &compilation.hir.locals[local];
+            let function = &compilation.hir.functions[definition.function];
+            location(
+                compilation,
+                function.module,
+                definition.span.clone(),
+                &definition.name,
+            )
+        }
+        SymbolIdentity::Constant(constant) => {
+            let definition = &compilation.hir.constants[constant];
+            location(
+                compilation,
+                definition.module,
+                definition.span.clone(),
+                &definition.name,
+            )
+        }
+        SymbolIdentity::Function(function) => {
+            let definition = &compilation.hir.functions[function];
+            let member = definition
+                .name
+                .rsplit_once('.')
+                .map_or(definition.name.as_str(), |(_, member)| member);
+            location(
+                compilation,
+                definition.module,
+                definition.span.clone(),
+                member,
+            )
+        }
+        SymbolIdentity::Record(record) => {
+            let definition = &compilation.hir.records[record];
+            location(
+                compilation,
+                definition.module,
+                definition.span.clone(),
+                &definition.name,
+            )
+        }
+        SymbolIdentity::RequiredMethod(record, method) => {
+            let record = &compilation.hir.records[record];
+            let method = &record.methods[method];
+            location(
+                compilation,
+                record.module,
+                method.span.clone(),
+                &method.name,
+            )
+        }
+        SymbolIdentity::Variant(variant) => {
+            let definition = &compilation.hir.variant_types[variant];
+            location(
+                compilation,
+                definition.module,
+                definition.span.clone(),
+                &definition.name,
+            )
+        }
+        SymbolIdentity::Builtin(builtin) => crate::lsp::builtins::definition_location(builtin),
     }
-    let prefix = before
-        .chars()
-        .zip(after.chars())
-        .take_while(|(a, b)| a == b)
-        .map(|(a, _)| a.len_utf8())
-        .sum::<usize>();
-    let suffix = before[prefix..]
-        .chars()
-        .rev()
-        .zip(after[prefix..].chars().rev())
-        .take_while(|(a, b)| a == b)
-        .map(|(a, _)| a.len_utf8())
-        .sum::<usize>();
-    let mut end_before = before.len() - suffix;
-    let mut end_after = after.len() - suffix;
-    // LSP positions cannot address the middle of CRLF. Replace the complete
-    // newline using the next line's column zero when normalizing line endings.
-    if before.as_bytes().get(end_before) == Some(&b'\n')
-        && end_before > 0
-        && before.as_bytes()[end_before - 1] == b'\r'
-    {
-        end_before += 1;
-        end_after += 1;
-    }
-    Some(TextEdit {
-        range: byte_range_to_lsp(source, offset + prefix..offset + end_before),
-        new_text: after[prefix..end_after].into(),
+}
+
+fn identifier_ranges<'a>(
+    source: &'a str,
+    expected: &'a str,
+) -> impl Iterator<Item = std::ops::Range<usize>> + 'a {
+    let bytes = source.as_bytes();
+    let mut index = 0;
+    std::iter::from_fn(move || {
+        while index < bytes.len() {
+            if !is_ident(bytes[index]) {
+                index += 1;
+                continue;
+            }
+            let start = index;
+            while index < bytes.len() && is_ident(bytes[index]) {
+                index += 1;
+            }
+            if &source[start..index] == expected {
+                return Some(start..index);
+            }
+        }
+        None
     })
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+fn valid_identifier(name: &str) -> bool {
+    let mut bytes = name.bytes();
+    bytes
+        .next()
+        .is_some_and(|first| first == b'_' || first.is_ascii_alphabetic())
+        && bytes.all(is_ident)
+}
 
-    fn apply(source: &str, edits: &[TextEdit]) -> String {
-        let end = byte_range_to_lsp(source, source.len()..source.len()).end;
-        let offset = |position| {
-            if position == end {
-                source.len()
-            } else {
-                position_to_offset(source, position).unwrap()
-            }
-        };
-        let mut result = source.to_owned();
-        for edit in edits.iter().rev() {
-            result.replace_range(
-                offset(edit.range.start)..offset(edit.range.end),
-                &edit.new_text,
-            );
-        }
-        result
-    }
+fn definition_in_module(
+    compilation: &crate::compiler::RecoveryCompilation,
+    module: crate::hir::ModuleId,
+    name: &str,
+) -> Option<Location> {
+    let definition = &compilation.hir.modules[module];
+    let span = definition
+        .constants
+        .get(name)
+        .map(|id| compilation.hir.constants[*id].span.clone())
+        .or_else(|| {
+            definition
+                .functions
+                .get(name)
+                .and_then(|overloads| overloads.first())
+                .map(|id| compilation.hir.functions[*id].span.clone())
+        })
+        .or_else(|| {
+            definition
+                .records
+                .get(name)
+                .map(|id| compilation.hir.records[*id].span.clone())
+        })
+        .or_else(|| {
+            definition
+                .variant_types
+                .get(name)
+                .map(|id| compilation.hir.variant_types[*id].span.clone())
+        })?;
+    location(compilation, module, span, name)
+}
 
-    #[test]
-    fn formatting_edits_match_cli_and_preserve_unchanged_lines() {
-        let source = "func main() -> Int {\nlet text = \"😀\"   \n    // unchanged\n 42\n}\n";
-        let formatted = crate::formatter::format(source).unwrap();
-        let edits = format_edits(source, &formatted);
-        assert_eq!(apply(source, &edits), formatted);
-        assert_eq!(edits.len(), 2);
-        assert!(
-            edits
-                .iter()
-                .all(|edit| edit.range.start.line == edit.range.end.line)
-        );
-        assert!(format_edits(&formatted, &formatted).is_empty());
-    }
+fn module_location(
+    compilation: &crate::compiler::RecoveryCompilation,
+    module: crate::hir::ModuleId,
+) -> Option<Location> {
+    location(compilation, module, 0..0, "")
+}
 
-    #[test]
-    fn formatting_handles_crlf_empty_text_and_line_count_changes() {
-        for source in [
-            "",
-            "\n\n",
-            "func main() {\r\nlet text = \"😀\"  \r\n}\r\n",
-            "\nfunc main() {\n\n\n0\n}\n\n",
-            "func main() { 0 }",
-        ] {
-            let formatted = crate::formatter::format(source).unwrap();
-            assert_eq!(
-                apply(source, &format_edits(source, &formatted)),
-                formatted,
-                "{source:?}"
-            );
-        }
-    }
+fn embedded_module_location(module: &str) -> Option<Location> {
+    let path = crate::package::embedded_source_path(module)?;
+    Some(Location::new(
+        path_to_uri(path.as_std_path())?,
+        lsp_types::Range::default(),
+    ))
+}
 
-    #[test]
-    fn formatting_uses_unsaved_text_and_rejects_malformed_source() {
-        let uri = "file:///format-test.fos".parse().unwrap();
-        let mut workspace = Workspace::new(&InitializeParams::default());
-        let source = "func main() {\n0\n}";
-        workspace.open(uri, source.into(), 3);
-        let params: lsp_types::DocumentFormattingParams = serde_json::from_value(serde_json::json!({
-            "textDocument": { "uri": "file:///format-test.fos" }, "options": { "tabSize": 2, "insertSpaces": false }
-        })).unwrap();
-        assert_eq!(
-            apply(source, &workspace.formatting(&params).unwrap()),
-            crate::formatter::format(source).unwrap()
-        );
-        workspace.change(
-            params.text_document.uri.clone(),
-            "func main() { let value = }".into(),
-            4,
-        );
-        assert!(workspace.formatting(&params).is_err());
-    }
-
-    #[test]
-    fn workspace_search_uses_unsaved_names_and_positions_without_checking() {
-        let mut workspace = Workspace::new(&InitializeParams::default());
-        workspace.compilations.snapshot_only = true;
-        let uri: Uri = "file:///symbols-test.fos".parse().unwrap();
-        let source =
-            "/// buildValue documentation\nfunc buildValue() -> Int { 0 }\nfunc unrelated() {}\n";
-        workspace.open(uri.clone(), source.into(), 1);
-        let results = workspace.workspace_symbols("bV");
-        assert_eq!(results.len(), 1);
-        assert_eq!(results[0].name, "buildValue");
-        assert_eq!(results[0].location.range.start, Position::new(1, 5));
-        workspace.change(uri.clone(), "\nfunc renamed() { 0 }".into(), 2);
-        assert!(workspace.workspace_symbols("buildValue").is_empty());
-        assert_eq!(
-            workspace.workspace_symbols("RENAMED")[0]
-                .location
-                .range
-                .start
-                .line,
-            1
-        );
-        workspace.close(&uri);
-        assert!(workspace.workspace_symbols("").is_empty());
-    }
+fn location(
+    compilation: &crate::compiler::RecoveryCompilation,
+    module: crate::hir::ModuleId,
+    span: std::ops::Range<usize>,
+    name: &str,
+) -> Option<Location> {
+    let module = &compilation.hir.modules[module];
+    let path = module.source_path.as_deref()?;
+    let source = compilation
+        .package
+        .module(&module.name)?
+        .source
+        .as_deref()?;
+    let span = find_name(source, span, name).unwrap_or(0..0);
+    Some(Location::new(
+        path_to_uri(path.as_std_path())?,
+        byte_range_to_lsp(source, span),
+    ))
 }

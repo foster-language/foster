@@ -1,8 +1,16 @@
 //! Current-buffer tooling. No checking or lowering is allowed on this path.
-use super::*;
+use super::Workspace;
+use super::completion::{add_module_completions, insert_completion, insert_documented_completion};
+use super::presentation::display_type_expr;
+use super::source::{identifier_at, path_to_uri, qualifier_before};
 use crate::ast::{self, BranchTest, ClosureBody, Expr, Pattern, Stmt};
 use crate::lexer::TokenKind;
-use std::collections::BTreeMap;
+use crate::lsp::byte_range_to_lsp;
+use lsp_types::{
+    CompletionItem, CompletionItemKind, DocumentChanges, OneOf,
+    OptionalVersionedTextDocumentIdentifier, TextDocumentEdit, TextEdit, Uri, WorkspaceEdit,
+};
+use std::collections::{BTreeMap, HashSet};
 
 type Items = BTreeMap<String, CompletionItem>;
 
@@ -658,9 +666,13 @@ impl Workspace {
 
 #[cfg(test)]
 mod tests {
+    use super::super::source::position_to_offset;
     use super::*;
+    use lsp_server::Message;
     use lsp_types::{
-        CodeActionContext, CodeActionOrCommand, CodeActionParams, TextDocumentIdentifier,
+        CodeActionContext, CodeActionOrCommand, CodeActionParams, CompletionParams,
+        CompletionResponse, InitializeParams, Position, TextDocumentIdentifier,
+        TextDocumentPositionParams,
     };
 
     fn workspace(source: &str) -> (Workspace, Uri) {
