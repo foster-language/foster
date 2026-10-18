@@ -80,6 +80,10 @@ fn main() {{
     )
 }
 
+// Assemble the standalone runtime from the same sources checked as Rust crates.
+// These replacements depend on exact source spellings, including include/use
+// statements; edits to those statements must also update this assembly path.
+// Safety comments in the embedded files describe both builds' shared ABI contract.
 fn runtime_source() -> String {
     let source = include_str!("../../../runtime/src/lib.rs")
         .replace("\r\n", "\n")

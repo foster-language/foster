@@ -1,3 +1,8 @@
+// Compiler-facing C bridge boundary. String/Bytes handles are borrowed only until
+// the synchronous exchange returns. The bridge receives copied packets or scoped
+// immutable buffers; returned packets are copied into new owned native Bytes.
+// Callback addresses and release functions are compiler-generated ABI entry
+// points, not user-supplied integers that runtime checks can validate.
 #[unsafe(no_mangle)]
 extern "C" fn foster_rt_v5_c_exchange_scalars(
     path: usize,
@@ -14,7 +19,10 @@ extern "C" fn foster_rt_v5_c_exchange_scalars(
             "C scalar arguments require a record of at most 256 Int, Float or Bool fields".into(),
         )));
     }
-    // Lowering supplies initialized repr(C) cells in a call-scoped stack frame.
+    // SAFETY: Lowering supplies initialized repr(C) Scalar cells in a call-scoped
+    // stack frame, readable for `count` elements. The checks above bound the
+    // extent and alignment; they do not establish provenance. Nothing retains
+    // this slice after exchange_scalars returns. Empty packets avoid raw slicing.
     let values = if count == 0 {
         &[]
     } else {
@@ -73,8 +81,11 @@ extern "C" fn foster_rt_v5_c_exchange_buffer(
             "invalid borrowed C buffer layout or length".into(),
         )));
     }
-    // Native lowering borrows initialized contiguous scalar storage. It keeps
-    // the Buffer owner live across this synchronous call; C cannot retain it.
+    // SAFETY: Native lowering borrows initialized contiguous scalar storage and
+    // keeps its Buffer owner alive and unmodified throughout this synchronous
+    // call. The checks above bound the extent and select the scalar alignment.
+    // The bridge contract forbids retaining or writing through the returned
+    // buffer pointer. Empty buffers use Rust's empty slice, never a null raw slice.
     let buffer = unsafe {
         match kind {
             1 => c_bridge::BorrowedBuffer::Integers(if length == 0 {
@@ -103,6 +114,9 @@ extern "C" fn foster_rt_v5_c_exchange_buffer(
     ))
 }
 
+// Owns one native reference to the closure environment owner. Registration moves
+// this guard into the thread-local callback handler; rejection also drops it.
+// `code`, `release`, and `release_packet` must remain executable for its lifetime.
 struct NativeCallback {
     code: unsafe extern "C" fn(usize, usize) -> usize,
     environment: usize,
@@ -112,6 +126,8 @@ struct NativeCallback {
 }
 impl Drop for NativeCallback {
     fn drop(&mut self) {
+        // SAFETY: callback_new transfers the owned environment reference to this
+        // guard. Its matching generated release is called exactly once on drop.
         unsafe {
             (self.release)(self.owner);
         }
@@ -121,7 +137,10 @@ impl NativeCallback {
     fn call(&self, payload: &[u8]) -> Result<Vec<u8>, String> {
         let previous = FOSTER_EXECUTION.with(|failure| failure.borrow_mut().take());
         let input = owned_bytes(payload);
-        // Generated Foster entry points take one owned ABI reference for each argument.
+        // SAFETY: `code` has the generated packet callback signature. `input` is
+        // a newly owned Bytes reference consumed by the entry point; the closure
+        // environment is kept live by this guard's owner reference. The callback
+        // registry confines execution to its registration thread.
         let output = unsafe { (self.code)(self.environment, input) };
         let failure = FOSTER_EXECUTION.with(|failure| failure.replace(previous));
         if let Some(failure) = failure {
@@ -130,7 +149,11 @@ impl NativeCallback {
         if output == 0 {
             return Err("callback returned a null packet".into());
         }
+        // SAFETY: A successful generated callback returns an owned Bytes packet.
+        // Copy its payload before releasing that ownership; no borrow escapes.
         let result = unsafe { bytes_value(output) }.to_vec();
+        // SAFETY: output is the unreleased owned result, and release_packet is
+        // its matching compiler-generated destructor.
         unsafe {
             (self.release_packet)(output);
         }
@@ -148,6 +171,10 @@ extern "C" fn foster_rt_v5_c_callback_new(
     mode: i64,
     owned: u8,
 ) -> usize {
+    // SAFETY: Native callback lowering supplies non-null executable addresses
+    // with these exact C signatures and transfers one owner reference. The owner
+    // keeps `environment` alive even for retained callbacks. Mode checks below
+    // enforce capture policy, not validity of these raw function addresses.
     let callback = NativeCallback {
         code: unsafe {
             std::mem::transmute::<usize, unsafe extern "C" fn(usize, usize) -> usize>(code)

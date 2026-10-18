@@ -71,6 +71,10 @@ pub(super) fn define(
         builder.append_block_params_for_function_params(entry);
         builder.switch_to_block(entry);
         let input = builder.block_params(entry).to_vec();
+        // These exports are the other half of runtime/src/lib.rs's raw-slice
+        // contract. Constructors synchronously copy borrowed Rust bytes into owned
+        // native storage. Accessors borrow that storage without retaining it, so
+        // the Rust caller must keep the managed owner live until its slice ends.
         let value = if name == "foster_native_bytes" {
             let (storage, data) =
                 allocate_native_bytes(&mut builder, module, objects, bytes, input[1])?;

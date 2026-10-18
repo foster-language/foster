@@ -1,4 +1,13 @@
+// Equality reads compiler-described storage without retaining or mutating it.
+// Shared subobjects may appear on both sides; no exclusive Rust borrows are made.
+
+/// # Safety
+/// Both addresses must contain initialized values of the representation selected
+/// by `semantic`. Nested handles, descriptors, and sequence backing allocations
+/// must remain live and stable for the full recursive comparison.
 unsafe fn equal_slot(left: usize, right: usize, semantic: u8) -> bool {
+    // SAFETY: The caller supplies the matching scalar/handle representation.
+    // Unaligned reads support packed fields; nested reads inherit that contract.
     unsafe {
         match semantic {
             0 => true,
@@ -14,6 +23,10 @@ unsafe fn equal_slot(left: usize, right: usize, semantic: u8) -> bool {
     }
 }
 
+/// # Safety
+/// Both object bases must support every offset/representation in `fields`, with
+/// initialized active fields and live nested storage. Offset arithmetic must
+/// remain within each object's allocation throughout the comparison.
 unsafe fn equal_fields(left: usize, right: usize, fields: &[RuntimeField]) -> bool {
     fields.iter().all(|field| unsafe {
         equal_slot(
@@ -24,7 +37,15 @@ unsafe fn equal_fields(left: usize, right: usize, fields: &[RuntimeField]) -> bo
     })
 }
 
+/// # Safety
+/// Each nonzero address must identify a live native object with its complete
+/// compiler-emitted descriptor and initialized active payload. Reachable objects
+/// and sequence storage must remain readable and unmodified during traversal.
+/// Descriptor identity is a layout discriminator, not pointer validation.
 unsafe fn equal_object(left: usize, right: usize) -> bool {
+    // SAFETY: The caller's object/descriptor contract covers recursive reads.
+    // Variant tags select only the initialized alternative; sequence lengths and
+    // element layouts describe the initialized portion of each backing allocation.
     unsafe {
         if left == 0 || right == 0 {
             return left == right;
@@ -122,5 +143,7 @@ unsafe fn equal_object(left: usize, right: usize) -> bool {
 
 #[unsafe(no_mangle)]
 extern "C" fn foster_rt_v5_object_equal(left: usize, right: usize) -> u8 {
+    // SAFETY: Native lowering passes borrowed operands with their managed owners
+    // alive until this synchronous comparison finishes.
     u8::from(unsafe { equal_object(left, right) })
 }

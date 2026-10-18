@@ -1,3 +1,8 @@
+// Host ABI handles below are live Box allocations represented as machine words.
+// Generated code owns responses/remotes/futures and pairs each with its release
+// export exactly once. Accessors borrow those handles; they neither retain them
+// nor validate arbitrary addresses. Calls that offload OS work first copy all
+// native String/Bytes inputs into owned Rust values.
 use may::sync::mpsc;
 #[cfg(unix)]
 use std::io::Read;
@@ -81,9 +86,11 @@ fn foster_host_response(response: FosterHostResponse) -> usize {
 }
 
 /// # Safety
-/// The handle must own a live response allocated by foster_host_response; the
-/// returned borrow must end before the response is released through the ABI.
+/// `response` must point to a live, aligned response allocated by
+/// `foster_host_response`. The caller-selected `'a` must end before release;
+/// no mutation or release may occur while the returned shared borrow exists.
 unsafe fn foster_host_response_ref<'a>(response: usize) -> &'a FosterHostResponse {
+    // SAFETY: The caller upholds the Box allocation and shared-borrow contract.
     unsafe { &*(response as *const FosterHostResponse) }
 }
 
@@ -501,6 +508,11 @@ extern "C" fn foster_rt_v5_host_call_int_string(operation: i64, handle: i64, tex
     foster_host_response(response)
 }
 
+/// # Safety
+/// For nonempty input, `data` must cover `length` initialized bytes in one live
+/// allocation, with length at most `isize::MAX`. The owner must remain alive and
+/// the bytes unmodified for the caller-selected `'a`. Null/negative checks do
+/// not validate the extent of an arbitrary allocation. Empty input ignores data.
 unsafe fn foster_host_input_bytes<'a>(data: usize, length: i64) -> &'a [u8] {
     let length = usize::try_from(length).unwrap_or_else(|_| std::process::abort());
     if length == 0 {
@@ -509,9 +521,13 @@ unsafe fn foster_host_input_bytes<'a>(data: usize, length: i64) -> &'a [u8] {
     if data == 0 {
         std::process::abort();
     }
+    // SAFETY: Nonempty input satisfies the caller's extent/lifetime contract.
     unsafe { std::slice::from_raw_parts(data as *const u8, length) }
 }
 
+// Response accessors borrow a live response through foster_host_response_ref.
+// String accessors return independent managed copies; scalar accessors copy words.
+// None of them extend the response handle's lifetime.
 #[unsafe(no_mangle)]
 extern "C" fn foster_rt_v5_host_require_ok(response: usize) -> u8 {
     let response = unsafe { foster_host_response_ref(response) };
@@ -571,6 +587,9 @@ extern "C" fn foster_rt_v5_host_copy_bytes(response: usize, destination: usize) 
         if destination == 0 {
             std::process::abort();
         }
+        // SAFETY: Native host lowering allocates destination for the length
+        // queried from this live response. It is disjoint from the response Vec;
+        // this call borrows the source only until the synchronous copy completes.
         unsafe {
             std::ptr::copy_nonoverlapping(bytes.as_ptr(), destination as *mut u8, bytes.len())
         };
@@ -586,6 +605,8 @@ extern "C" fn foster_rt_v5_host_strings_length(response: usize) -> i64 {
 
 #[unsafe(no_mangle)]
 extern "C" fn foster_rt_v5_host_release(response: usize) -> u8 {
+    // SAFETY: Generated cleanup passes the original Box::into_raw pointer once,
+    // after every accessor borrow ends, and never accesses this handle again.
     unsafe { drop(Box::from_raw(response as *mut FosterHostResponse)) };
     0
 }
@@ -629,7 +650,7 @@ extern "C" fn foster_rt_v5_failure_state() -> usize {
 
 #[unsafe(no_mangle)]
 extern "C" fn foster_rt_v5_failure_pending_in(state: usize) -> u8 {
-    // Compiler-only ABI: state was acquired in this invocation's context and
+    // SAFETY: Compiler-only ABI: state was acquired in this invocation's context and
     // remains live across calls and coroutine suspension. No RefCell borrow is
     // held across a call; callbacks and cleanup can update the same slot.
     let execution = unsafe { &*(state as *const std::cell::RefCell<Option<String>>) };
@@ -705,15 +726,25 @@ fn foster_remote_abort(message: &str) -> ! {
     std::process::exit(2);
 }
 
+/// Releases one owned ABI value with its compiler-selected destructor.
+///
+/// # Safety
+/// A nonzero `release` must be an executable `FosterReleaseCallback` for this
+/// value's representation and remain loaded through the call. `value` must own
+/// the matching unreleased reference, with no conflicting accesses. The destructor
+/// must be legal in the calling execution context. Zero release means no cleanup.
 unsafe fn foster_release_word(value: u64, release: usize) {
     if release == 0 {
         return;
     }
     let value = usize::try_from(value).unwrap_or_else(|_| std::process::abort());
+    // SAFETY: The caller supplies the exact function signature and owned value.
     let release: FosterReleaseCallback = unsafe { std::mem::transmute(release) };
     unsafe { release(value) };
 }
 
+// Owns a result until await transfers it by clearing `release`. Dropping an
+// unobserved/cancelled completion instead invokes its matching destructor.
 struct FosterRemoteCompletion {
     value: u64,
     release: usize,
@@ -721,6 +752,8 @@ struct FosterRemoteCompletion {
 
 impl Drop for FosterRemoteCompletion {
     fn drop(&mut self) {
+        // SAFETY: Worker completion stores the generated result/destructor pair;
+        // await disarms this guard before handing ownership to generated code.
         unsafe { foster_release_word(self.value, self.release) };
     }
 }
@@ -749,6 +782,10 @@ struct FosterFuture {
 
 #[unsafe(no_mangle)]
 extern "C" fn foster_rt_v5_remote_spawn(state: u64, release: usize, borrowed: u8) -> usize {
+    // Native lowering transfers the actor state reference and matching release
+    // thunk to this worker. Message callbacks serialize its access. For borrowed
+    // state, Foster's lifetime rules keep backing storage alive through use;
+    // borrowed calls wait for completion before their caller resumes.
     let (sender, receiver) = mpsc::channel::<FosterRemoteMessage>();
     let control = Arc::new(remote_lifecycle::Control::default());
     let worker_control = control.clone();
@@ -756,10 +793,14 @@ extern "C" fn foster_rt_v5_remote_spawn(state: u64, release: usize, borrowed: u8
         FOSTER_CANCELLATION.with(|slot| *slot.borrow_mut() = Some(worker_control.clone()));
         while let Ok(message) = receiver.recv() {
             if worker_control.error().is_some() || message.request.is_none() {
+                // SAFETY: The generated callback consumes the owned argument
+                // words even when execute=0; it must not execute the user method.
                 unsafe { (message.callback)(state, message.arguments.as_ptr() as usize, 0) };
                 continue;
             }
             let arguments = message.arguments.as_ptr() as usize;
+            // SAFETY: Message storage keeps the packet live during the thunk;
+            // callback matches this actor state and owns the packed arguments.
             let value = unsafe { (message.callback)(state, arguments, 1) };
             let failure = FOSTER_EXECUTION.with(|execution| execution.borrow_mut().take());
             if let Some(error) = failure {
@@ -776,6 +817,8 @@ extern "C" fn foster_rt_v5_remote_spawn(state: u64, release: usize, borrowed: u8
             }
         }
         FOSTER_CANCELLATION.with(|slot| slot.borrow_mut().take());
+        // SAFETY: The worker is finished with its transferred state reference.
+        // No message accesses it after this matching destructor runs.
         unsafe { foster_release_word(state, release) };
     });
     Box::into_raw(Box::new(FosterRemote {
@@ -799,6 +842,8 @@ extern "C" fn foster_rt_v5_remote_call(
     blocking: u8,
     result_release: usize,
 ) -> usize {
+    // SAFETY: Native lowering keeps the Box-backed remote handle live for this
+    // call and supplies the generated request thunk with its exact C signature.
     let remote = unsafe { &*(remote as *const FosterRemote) };
     let callback: FosterRemoteCallback = unsafe { std::mem::transmute(callback) };
     let argument_count = usize::try_from(argument_count).unwrap_or_else(|_| std::process::abort());
@@ -808,6 +853,9 @@ extern "C" fn foster_rt_v5_remote_call(
         if arguments == 0 {
             std::process::abort();
         }
+        // SAFETY: Lowering supplies an aligned, initialized packet of this many
+        // u64 words. Copying preserves the words before the caller's stack frame
+        // ends; ownership of their managed values transfers to the request thunk.
         unsafe { std::slice::from_raw_parts(arguments as *const u64, argument_count) }.to_vec()
     };
     let (response, receiver) = mpsc::channel();
@@ -845,6 +893,8 @@ extern "C" fn foster_rt_v5_remote_call(
 
 #[unsafe(no_mangle)]
 extern "C" fn foster_rt_v5_future_await(future: usize) -> u64 {
+    // SAFETY: The generated caller borrows a live Box-backed future. Its release
+    // cannot run during this call; the receiver mutex enforces one await.
     let future = unsafe { &*(future as *const FosterFuture) };
     let receiver = future
         .receiver
@@ -881,6 +931,7 @@ extern "C" fn foster_rt_v5_future_await(future: usize) -> u64 {
 
 #[unsafe(no_mangle)]
 extern "C" fn foster_rt_v5_future_error(future: usize) -> usize {
+    // SAFETY: The future handle remains live through this borrowed error query.
     let future = unsafe { &*(future as *const FosterFuture) };
     future
         .error
@@ -895,6 +946,8 @@ extern "C" fn foster_rt_v5_future_error(future: usize) -> usize {
 
 #[unsafe(no_mangle)]
 extern "C" fn foster_rt_v5_remote_release(remote: usize) -> u8 {
+    // SAFETY: This consumes the sole Box handle after its accessor borrows end.
+    // Worker state has separate ownership and is reclaimed by the worker itself.
     let remote = unsafe { Box::from_raw(remote as *mut FosterRemote) };
     let FosterRemote {
         control,
@@ -924,6 +977,8 @@ extern "C" fn foster_rt_v5_remote_release(remote: usize) -> u8 {
 
 #[unsafe(no_mangle)]
 extern "C" fn foster_rt_v5_future_release(future: usize) -> u8 {
+    // SAFETY: Generated cleanup consumes this Box::into_raw handle exactly once,
+    // after await/error borrows end. Any queued completion retains its own guard.
     unsafe { drop(Box::from_raw(future as *mut FosterFuture)) };
     0
 }
@@ -1023,6 +1078,8 @@ fn foster_random_fill(output: &mut [u8]) -> Result<(), String> {
     }
     let output_length = u32::try_from(output.len())
         .map_err(|_| "operating-system entropy request exceeds the Windows API limit".to_owned())?;
+    // SAFETY: The exclusive slice covers output_length writable bytes. A null
+    // algorithm handle is required for this flag; BCrypt retains no buffer pointer.
     let status = unsafe {
         foster_bcrypt_gen_random(
             std::ptr::null_mut(),

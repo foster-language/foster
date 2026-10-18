@@ -1,4 +1,14 @@
 // Shared verbatim by the VM and native runtime; keep this module std-only.
+//
+// Trust boundary: a loaded bridge is executable native code implementing the
+// generated C ABI, not an untrusted packet parser. Version/schema checks detect
+// mismatches but cannot prove export signatures or prevent a DLL from writing
+// past supplied buffers. Callers must load a bridge built for the binding schema.
+//
+// Resource tokens and frames are thread-local. Rc keeps libraries loaded while
+// resources/calls use their function pointers; leases prevent overlapping use of
+// native resources. Resolver pointers borrow the current frame only. A bridge
+// must not retain borrowed buffers or access a resource after transfer/destruction.
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -94,6 +104,9 @@ thread_local! {
     static RESOURCE_FRAMES: RefCell<Vec<ResourceFrame>> = const { RefCell::new(Vec::new()) };
     static RESOURCE_ERROR: RefCell<Option<String>> = const { RefCell::new(None) };
 }
+// Raw buffer pointers in ResourceFrame erase a Rust lifetime. Every guard must
+// be scoped inside the exchange that owns its BorrowedBuffer; it must be popped
+// before that buffer can expire. Nested frames resolve only their own top entry.
 struct ResourceFrameGuard;
 impl ResourceFrameGuard {
     fn new(
@@ -135,6 +148,11 @@ impl ResourceFrameGuard {
     }
 }
 
+/// # Safety
+/// Non-null output pointers must be aligned, writable for their respective types,
+/// and disjoint. The bridge may use the resulting immutable buffer only during
+/// the active synchronous exchange, without mutation, retention, or cross-thread
+/// access. Schema/kind checks identify a frame; they do not validate output memory.
 unsafe extern "C" fn resolve_buffer(
     schema: u64,
     kind: u32,
@@ -152,6 +170,8 @@ unsafe extern "C" fn resolve_buffer(
             if actual_kind != kind || format!("{schema:016x}") != frame.library.schema {
                 return Err(());
             }
+            // SAFETY: The bridge supplies writable output cells. The current
+            // frame's scoped BorrowedBuffer keeps this immutable payload live.
             unsafe {
                 *output = pointer;
                 *length = count;
@@ -170,6 +190,12 @@ impl Drop for ResourceFrameGuard {
     }
 }
 
+/// # Safety
+/// A non-null `output` must be aligned and writable for one pointer. The bridge
+/// must follow the resolver action protocol: borrow (0), retain parent (1),
+/// commit transfer (2), or check transfer (3). Borrowed pointers are usable only
+/// within the active frame; transferred pointers must receive exactly one new
+/// native owner. Foreign code must not unwind through this callback.
 unsafe extern "C" fn resolve_resource(
     schema: u64,
     token: i64,
@@ -240,12 +266,16 @@ unsafe extern "C" fn resolve_resource(
                     .library
                     .forget
                     .ok_or("C bridge does not support ownership transfer")?;
+                // SAFETY: A checked transfer uses this resource's own library
+                // and kind; its live pointer is leased to this frame. `forget`
+                // unregisters the old native owner without destroying the value.
                 unsafe { forget(kind, pointer) };
                 resource.borrow_mut().pointer = std::ptr::null_mut();
                 // Keep a tombstone until the consumed Foster owner runs deinit.
                 // Its ordinary release removes the entry without destroying the
                 // native value now owned by the constructor's result.
             }
+            // SAFETY: The callback contract supplies the writable pointer cell.
             unsafe { *output = pointer };
             Ok(())
         })
@@ -262,6 +292,9 @@ unsafe extern "C" fn resolve_resource(
 impl Drop for Resource {
     fn drop(&mut self) {
         if !self.pointer.is_null() {
+            // SAFETY: This Resource owns the matching kind/pointer. Transfer or
+            // consumed close nulls the pointer; Rc keeps destroy's DLL loaded,
+            // and retained parents stay alive until after this destructor.
             unsafe { (self.library.destroy)(self.kind, self.pointer) };
         }
     }
@@ -359,6 +392,8 @@ pub fn exchange_scalars(path: &str, schema: &str, operation: i64, values: &[Scal
                     .into(),
             );
         }
+        // SAFETY: Library::load binds the generated Describe signature; this Rc
+        // keeps its DLL loaded. describe accepts an operation id, not Rust pointers.
         let metadata = unsafe { (library.describe)(operation) };
         if metadata & 0xffff != 1 || metadata >> 32 != 0 || (metadata >> 16) & 0xffff > 8 {
             return Err("C operation does not support a scalar call".into());
@@ -368,6 +403,9 @@ pub fn exchange_scalars(path: &str, schema: &str, operation: i64, values: &[Scal
             .ok_or("C bridge has no scalar stubs; regenerate and rebuild the bridge")?;
         let mut output = [0; 8];
         let mut length = 0;
+        // SAFETY: The synchronous scalar ABI borrows initialized Scalar cells,
+        // writes at most the fixed eight-byte result, and updates a live length
+        // cell. The loaded bridge must honor that capacity and retain no pointers.
         let status = unsafe {
             call(
                 operation,
@@ -455,6 +493,8 @@ fn exchange_inner(
                     .into(),
             );
         }
+        // SAFETY: The loaded library owns this generated function pointer and
+        // remains live; describing an unknown operation is handled by the bridge.
         let metadata = unsafe { (library.describe)(operation) };
         if (metadata & 512 != 0) != buffer.is_some() || (buffer.is_some() && !library.buffers) {
             return Err("C operation requires a matching borrowed buffer call".into());
@@ -488,6 +528,10 @@ fn exchange_inner(
         let mut length = 0;
         let mut created = std::ptr::null_mut();
         RESOURCE_ERROR.with(|error| error.borrow_mut().take());
+        // SAFETY: The active frame leases the receiver and resolver resources.
+        // Input/output slices and both result cells remain live through this
+        // synchronous call. The bridge must honor capacities, retain no packet
+        // pointers, and return any created pointer under its declared ownership.
         let status = unsafe {
             (library.call)(
                 operation,
@@ -560,6 +604,9 @@ pub fn close(token: i64) -> Vec<u8> {
             return Err("C resource ownership has been transferred".into());
         }
         let mut consumed = 0;
+        // SAFETY: The resource is live, exclusively borrowed, unleased, and not
+        // retained by another owner. Its library supplies the matching close ABI;
+        // consumed is writable. A consumed close disables later destruction.
         let status =
             unsafe { (resource.library.close)(resource.kind, resource.pointer, &mut consumed) };
         if consumed != 0 {
@@ -665,6 +712,10 @@ pub fn release(token: i64) -> Result<(), String> {
 impl Library {
     fn load(path: &str) -> Result<Self, String> {
         let module = Module::load(path)?;
+        // SAFETY: The loaded DLL must implement the generated export signatures
+        // named below, including version/schema probes. Lookup yields addresses,
+        // not proof of their types. This Module is moved into Library so every
+        // bound function stays loaded for all calls and Resource destructors.
         unsafe {
             let version: unsafe extern "C" fn() -> u64 =
                 std::mem::transmute(module.symbol(b"foster_c_abi\0")?);
@@ -753,6 +804,8 @@ impl Module {
         let native_path = path.replace('/', "\\");
         let wide: Vec<_> = native_path.encode_utf16().chain(Some(0)).collect();
         // Search dependencies only beside the bridge and in System32, never cwd.
+        // SAFETY: wide is NUL-terminated and live through the call; the reserved
+        // file handle is null. Success transfers one loader reference to Module.
         let module = unsafe { LoadLibraryExW(wide.as_ptr(), std::ptr::null_mut(), 0x100 | 0x800) };
         if module.is_null() {
             Err(format!(
@@ -764,6 +817,8 @@ impl Module {
         }
     }
     fn symbol(&self, name: &[u8]) -> Result<*mut std::ffi::c_void, String> {
+        // SAFETY: Call sites supply NUL-terminated export-name literals. self
+        // holds a live loader reference; the returned address must not outlive it.
         let pointer = unsafe { GetProcAddress(self.0, name.as_ptr()) };
         if pointer.is_null() {
             Err(format!(
@@ -778,6 +833,8 @@ impl Module {
 #[cfg(all(windows, target_arch = "x86_64"))]
 impl Drop for Module {
     fn drop(&mut self) {
+        // SAFETY: Module owns one successful LoadLibraryExW reference. Resource
+        // and call Rc owners keep it alive until no bound function is in use.
         unsafe {
             FreeLibrary(self.0);
         }

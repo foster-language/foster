@@ -1,4 +1,9 @@
 //! Backend-independent callback tokens. C sees integers, never Foster addresses.
+//!
+//! Handlers and their captures stay on the registration thread in `HANDLERS`.
+//! Only `Signal` crosses threads: queued calls copy packets under its mutex, and
+//! the owner later drains them. Direct calls check thread identity before looking
+//! up a handler. Neither mode retains an incoming C packet pointer.
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
@@ -140,7 +145,12 @@ pub fn take_error(token: i64) -> Result<(), String> {
 /// `output` must be writable for `capacity` bytes when capacity is nonzero, and
 /// `written` must be aligned and writable for one u64. These regions must remain
 /// valid throughout the call and must not alias in a way that violates Rust's
-/// slice or pointer access rules. Probe calls do not access the packet pointers.
+/// slice or pointer access rules. Input bytes must remain unmodified while the
+/// shared payload slice exists, including during a direct handler invocation.
+/// Neither that handler nor foreign code may free the packet during the call.
+/// Probe calls do not access the packet pointers. Bounds/null checks below do
+/// not establish allocation validity. Foreign callers must not unwind through
+/// this C ABI; handler panics are caught by `call` before returning to it.
 pub unsafe extern "C" fn invoke(
     token: i64,
     signature: u64,
@@ -179,12 +189,15 @@ pub unsafe extern "C" fn invoke(
     {
         return fail("invalid callback packet".into());
     }
+    // SAFETY: The caller supplies an aligned, writable result-length cell.
     unsafe {
         *written = 0;
     }
     let payload = if length == 0 {
         &[]
     } else {
+        // SAFETY: The checked nonempty extent is within LIMIT; the caller keeps
+        // that allocation readable and immutable until the packet borrow ends.
         unsafe { std::slice::from_raw_parts(input, length as usize) }
     };
     if signal.queued {
@@ -211,10 +224,14 @@ pub unsafe extern "C" fn invoke(
             if bytes.len() <= capacity as usize && (bytes.is_empty() || !output.is_null()) =>
         {
             if !bytes.is_empty() {
+                // SAFETY: The capacity/null checks above bound this write. bytes
+                // owns a separate result Vec; the caller provides disjoint live
+                // output storage and the bridge retains neither pointer.
                 unsafe {
                     std::ptr::copy_nonoverlapping(bytes.as_ptr(), output, bytes.len());
                 }
             }
+            // SAFETY: The caller's result-length cell remains writable throughout.
             unsafe {
                 *written = bytes.len() as u64;
             }

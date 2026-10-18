@@ -13,6 +13,9 @@ fn allocate_byte_data(
 ) -> Result<ClifValue, FosterError> {
     let word = module.target_config().pointer_type();
     let empty = builder.ins().icmp_imm_s(IntCC::Equal, length, 0);
+    // The Rust runtime constructs slices from this address, including for empty
+    // values. Allocate one byte rather than return null or request a zero-sized
+    // allocation; release lowering must use the same minimum allocation size.
     let one = builder.ins().iconst(word, 1);
     let size = builder.ins().select(empty, one, length);
     let align = builder.ins().iconst(types::I64, 1);

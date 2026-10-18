@@ -73,9 +73,13 @@ fn poll_socket(
         events: if writable { 0x10 } else { 0x100 },
         revents: 0,
     };
-    // The borrowed socket remains owned throughout this single-descriptor poll.
+    // SAFETY: fd is one initialized repr(C) WSAPOLLFD-compatible cell, writable
+    // for the call. The borrowed socket remains owned through the synchronous
+    // poll; Winsock retains neither the cell nor ownership of the socket.
     let result = unsafe { WSAPoll(&mut fd, 1, timeout) };
     if result < 0 {
+        // SAFETY: WSAGetLastError takes no pointers and reads this thread's error
+        // immediately after the failing Winsock call.
         return Err(std::io::Error::from_raw_os_error(unsafe {
             WSAGetLastError()
         }));
@@ -120,6 +124,9 @@ fn poll_socket(
         events: if writable { 4 } else { 1 },
         revents: 0,
     };
+    // SAFETY: fd is one initialized repr(C) pollfd-compatible cell. The target's
+    // nfds_t alias matches Count above; the borrowed socket owner outlives this
+    // synchronous call, which neither closes the fd nor retains the cell.
     let result = unsafe { poll(&mut fd, 1, timeout) };
     if result < 0 {
         let error = std::io::Error::last_os_error();

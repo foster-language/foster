@@ -1,4 +1,22 @@
 //! Stable native runtime, compiled and linted as an ordinary Rust crate.
+//!
+//! # Native ABI trust boundary
+//!
+//! The `foster_rt_v5_*` exports are called by compiler-generated code. Integer
+//! addresses carry no Rust lifetime or ownership information: callers must supply
+//! live allocations with the layout selected by native lowering. Bounds, magic,
+//! and null checks below do not establish that an arbitrary address is readable.
+//! These exports are not validators for untrusted native pointers.
+//!
+//! Managed String/Bytes arguments are borrowed for the call; constructors return
+//! an owned ABI reference. Raw reference loads/stores borrow the underlying slot.
+//! Box-backed host, remote, and future handles have their own exactly-once release
+//! functions. Borrowed data must not escape its owner or race with mutation/free.
+//! Foreign libraries must obey the generated bridge ABI as well.
+//!
+//! Audit the other side of these contracts in compiler/src/native: text_boundary.rs
+//! implements managed text/byte access, host.rs and remote.rs lower host calls and
+//! ownership transfers, and layout descriptors drive rendering and equality.
 use std::alloc::{Layout, alloc_zeroed, dealloc, handle_alloc_error};
 use std::ffi::OsString;
 use std::sync::OnceLock;
@@ -76,6 +94,8 @@ fn bounds_error(kind: &str, index: i64, length: usize) -> ! {
 extern "C" fn foster_rt_v5_alloc(size: i64, align: i64) -> usize {
     let layout = Layout::from_size_align(size as usize, align as usize)
         .unwrap_or_else(|_| std::process::abort());
+    // SAFETY: Native allocation lowering supplies a nonzero size. Layout checks
+    // alignment/size validity; generated release code retains this exact layout.
     let pointer = unsafe { alloc_zeroed(layout) };
     if pointer.is_null() {
         handle_alloc_error(layout);
@@ -87,6 +107,8 @@ extern "C" fn foster_rt_v5_alloc(size: i64, align: i64) -> usize {
 extern "C" fn foster_rt_v5_dealloc(pointer: usize, size: i64, align: i64) -> u8 {
     let layout = Layout::from_size_align(size as usize, align as usize)
         .unwrap_or_else(|_| std::process::abort());
+    // SAFETY: Generated cleanup supplies an unreleased allocation from the paired
+    // allocator, with the original size/alignment and no remaining accesses.
     unsafe { dealloc(pointer as *mut u8, layout) };
     0
 }
@@ -130,22 +152,44 @@ unsafe extern "C" {
 }
 
 pub fn owned_string(text: &str) -> usize {
+    // SAFETY: The generated constructor copies this live UTF-8 slice before
+    // returning; it does not retain the Rust buffer. The result is an owned handle.
     unsafe { foster_native_string(text.as_ptr() as usize, text.len() as i64) }
 }
 
 fn owned_bytes(bytes: &[u8]) -> usize {
+    // SAFETY: The generated constructor copies the slice synchronously, including
+    // the empty case; its owned result does not borrow this Rust allocation.
     unsafe { foster_native_bytes(bytes.as_ptr() as usize, bytes.len() as i64) }
 }
 
+/// Borrows the payload of a native managed Bytes value without retaining it.
+///
+/// # Safety
+/// `value` must be a live Bytes handle produced by this program's native backend.
+/// Its payload must be initialized, non-null even when empty, and fit in one
+/// allocation of at most `isize::MAX` bytes. The caller chooses `'a` and must keep
+/// the owner alive and prevent mutation for that entire lifetime.
 unsafe fn bytes_value<'a>(value: usize) -> &'a [u8] {
+    // SAFETY: The handle/layout contract supplies both accessors with a live object.
     let data = unsafe { foster_native_bytes_data(value) };
     let length = unsafe { foster_native_bytes_length(value) } as usize;
+    // SAFETY: The caller guarantees the payload extent and shared-borrow lifetime.
     unsafe { std::slice::from_raw_parts(data as *const u8, length) }
 }
 
+/// Borrows native String storage; the Rust lifetime is not tied to the handle.
+///
+/// # Safety
+/// `value` must be a live native String handle with an initialized, immutable UTF-8
+/// payload. Data must be non-null even when empty and span one allocation of at
+/// most `isize::MAX` bytes. The owner must outlive the caller-selected `'a`.
 unsafe fn string_value<'a>(value: usize) -> &'a str {
+    // SAFETY: The caller supplies the String representation these accessors expect.
     let data = unsafe { foster_native_string_data(value) };
     let length = unsafe { foster_native_string_length(value) } as usize;
+    // SAFETY: Native String construction preserves UTF-8; the caller keeps its
+    // immutable backing allocation alive for the complete returned borrow.
     unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(data as *const u8, length)) }
 }
 
@@ -161,12 +205,22 @@ struct RuntimeField {
     name: String,
 }
 
+// Descriptor readers advance a cursor through compiler-emitted FLYT v2 metadata.
+// Packed fields need not be aligned. These functions have no buffer length;
+// validating a header does not make later reads safe for arbitrary input.
+
+/// # Safety
+/// `descriptor + *offset` must address one initialized readable byte, without
+/// address/cursor overflow. The descriptor must remain live during the read.
 unsafe fn descriptor_u8(descriptor: usize, offset: &mut usize) -> u8 {
     let value = unsafe { *((descriptor + *offset) as *const u8) };
     *offset += 1;
     value
 }
 
+/// # Safety
+/// The cursor must have two initialized readable bytes in the live descriptor;
+/// address/cursor arithmetic must not overflow. Alignment is not required.
 unsafe fn descriptor_u16(descriptor: usize, offset: &mut usize) -> u16 {
     let pointer = (descriptor + *offset) as *const u16;
     let value = u16::from_le(unsafe { pointer.read_unaligned() });
@@ -174,6 +228,9 @@ unsafe fn descriptor_u16(descriptor: usize, offset: &mut usize) -> u16 {
     value
 }
 
+/// # Safety
+/// The cursor must have four initialized readable bytes in the live descriptor;
+/// address/cursor arithmetic must not overflow. Alignment is not required.
 unsafe fn descriptor_u32(descriptor: usize, offset: &mut usize) -> u32 {
     let pointer = (descriptor + *offset) as *const u32;
     let value = u32::from_le(unsafe { pointer.read_unaligned() });
@@ -181,6 +238,9 @@ unsafe fn descriptor_u32(descriptor: usize, offset: &mut usize) -> u32 {
     value
 }
 
+/// # Safety
+/// The cursor must address a complete u32-length-prefixed text field in a live
+/// descriptor. Its byte span and cursor arithmetic must satisfy slice bounds.
 unsafe fn descriptor_text(descriptor: usize, offset: &mut usize) -> String {
     let length = unsafe { descriptor_u32(descriptor, offset) } as usize;
     let bytes = unsafe { std::slice::from_raw_parts((descriptor + *offset) as *const u8, length) };
@@ -188,6 +248,9 @@ unsafe fn descriptor_text(descriptor: usize, offset: &mut usize) -> String {
     String::from_utf8_lossy(bytes).into_owned()
 }
 
+/// # Safety
+/// The cursor must address a complete compiler-emitted value-layout entry in a
+/// live descriptor, with enough readable bytes for every field consumed below.
 unsafe fn descriptor_value(descriptor: usize, offset: &mut usize) -> RuntimeValueLayout {
     let size = unsafe { descriptor_u32(descriptor, offset) } as usize;
     let _align = unsafe { descriptor_u16(descriptor, offset) };
@@ -197,6 +260,9 @@ unsafe fn descriptor_value(descriptor: usize, offset: &mut usize) -> RuntimeValu
     RuntimeValueLayout { size, semantic }
 }
 
+/// # Safety
+/// The cursor must address a complete field entry, including its value layout,
+/// reserved bytes, and length-prefixed name, within the live descriptor.
 unsafe fn descriptor_field(descriptor: usize, offset: &mut usize) -> RuntimeField {
     let _index = unsafe { descriptor_u32(descriptor, offset) };
     let field_offset = unsafe { descriptor_u32(descriptor, offset) } as usize;
@@ -211,6 +277,9 @@ unsafe fn descriptor_field(descriptor: usize, offset: &mut usize) -> RuntimeFiel
     }
 }
 
+/// # Safety
+/// The cursor must address a readable count followed by that many complete field
+/// entries. All cursor advances must stay within the live descriptor allocation.
 unsafe fn descriptor_fields(descriptor: usize, offset: &mut usize) -> Vec<RuntimeField> {
     let count = unsafe { descriptor_u32(descriptor, offset) } as usize;
     (0..count)
@@ -218,10 +287,17 @@ unsafe fn descriptor_fields(descriptor: usize, offset: &mut usize) -> Vec<Runtim
         .collect()
 }
 
+/// # Safety
+/// `address` must identify `size_of::<usize>()` initialized readable bytes in live
+/// storage with no concurrent writes. The word may be unaligned.
 unsafe fn runtime_word(address: usize) -> usize {
     unsafe { (address as *const usize).read_unaligned() }
 }
 
+/// # Safety
+/// `address` must hold an initialized value of the representation selected by
+/// `semantic`. Any nested managed handles/descriptors must remain live and stable
+/// throughout recursive rendering. Reference values are displayed, not followed.
 unsafe fn render_slot(address: usize, semantic: u8) {
     match semantic {
         0 => print!("()"),
@@ -244,6 +320,11 @@ unsafe fn render_slot(address: usize, semantic: u8) {
     }
 }
 
+/// # Safety
+/// A nonzero `object` must be a live compiler-laid-out object whose descriptor,
+/// active fields, and nested storage are readable for this call. Header checks
+/// identify layouts only; they cannot validate pointer provenance or allocation
+/// lengths. No field or backing collection may be mutated during traversal.
 unsafe fn render_object(object: usize) {
     if object == 0 {
         print!("<null>");
@@ -386,12 +467,24 @@ pub extern "C" fn foster_rt_v5_write_byte(value: u8) -> u8 {
     0
 }
 #[unsafe(no_mangle)]
+/// Prints a borrowed native String handle.
+///
+/// ABI contract: `value` must satisfy `string_value`'s live UTF-8 storage
+/// requirements for this call. This export does not validate a raw address.
 pub extern "C" fn foster_rt_v5_write_string(value: usize) -> u8 {
+    // SAFETY: The generated entry shim keeps the result's owner alive until
+    // printing finishes and only then invokes its result-release function.
     print!("{}", unsafe { string_value(value) });
     0
 }
 #[unsafe(no_mangle)]
+/// Prints a borrowed native object using its compiler-emitted layout descriptor.
+///
+/// ABI contract: `value` and reachable storage must satisfy `render_object`'s
+/// requirements for the complete traversal. No ownership is consumed here.
 pub extern "C" fn foster_rt_v5_write_object(value: usize) -> u8 {
+    // SAFETY: Generated callers keep the result and its reachable owners alive
+    // throughout rendering; descriptor-driven access matches its native layout.
     unsafe { render_object(value) };
     0
 }
@@ -418,6 +511,9 @@ extern "C" fn foster_rt_v5_string_constant(index: i64) -> usize {
 
 #[unsafe(no_mangle)]
 extern "C" fn foster_rt_v5_string_empty(value: usize) -> u8 {
+    // SAFETY: As for the String operations below, generated callers lend live,
+    // immutable String handles for the full call. Returned text is owned and
+    // never borrows the operands. No Rust view escapes to generated code.
     u8::from(unsafe { string_value(value).is_empty() })
 }
 
@@ -446,6 +542,9 @@ extern "C" fn foster_rt_v5_string_concat(left: usize, right: usize) -> usize {
 #[unsafe(no_mangle)]
 extern "C" fn foster_rt_v5_copy_bytes(destination: usize, source: usize, length: i64) -> u8 {
     let length = usize::try_from(length).unwrap_or_else(|_| std::process::abort());
+    // SAFETY: Native construction supplies distinct source/destination ranges,
+    // initialized source bytes, and writable destination capacity for `length`.
+    // Both addresses must remain valid and non-null even for a zero-length copy.
     unsafe { std::ptr::copy_nonoverlapping(source as *const u8, destination as *mut u8, length) };
     0
 }
@@ -562,6 +661,12 @@ extern "C" fn foster_rt_v5_float32_bits(value: f64) -> i64 {
     }
 }
 
+// Reference ABI contract for the load/store family below: lowering supplies a
+// live slot aligned for the selected Rust scalar type. Loads require initialized
+// storage; stores require write permission with no conflicting Rust references or
+// concurrent accesses. Foster ownership analysis must keep the referent alive;
+// integer addresses themselves enforce none of these properties. Pointer stores
+// only write the word: ownership retains/releases belong to generated code.
 #[unsafe(no_mangle)]
 extern "C" fn foster_rt_v5_ref_load_i8(reference: usize) -> u8 {
     unsafe { *(reference as *const u8) }

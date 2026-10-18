@@ -1,3 +1,6 @@
+// Copy borrowed native strings before offloading: the OS worker may outlive a
+// coroutine suspension, and must own Rust data rather than borrow Foster storage.
+// The returned text is copied back into a new owned native String.
 #[unsafe(no_mangle)]
 extern "C" fn foster_rt_v5_process_exchange(
     operation: i64,
@@ -7,6 +10,8 @@ extern "C" fn foster_rt_v5_process_exchange(
     directory: usize,
     limit: i64,
 ) -> usize {
+    // SAFETY: Generated callers keep all three String owners alive and immutable
+    // until these synchronous copies finish; no native handle enters the worker.
     let executable = unsafe { string_value(executable) }.to_owned();
     let arguments = unsafe { string_value(arguments) }.to_owned();
     let directory = unsafe { string_value(directory) }.to_owned();
