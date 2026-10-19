@@ -58,22 +58,22 @@ pub enum GeneralCategory = Unassigned
 
 impl CodePoint {
     /// Reads `.bytes`: the Unicode scalar as four little-endian bytes, not UTF-8.
-    pub func bytes(self: Self) -> Bytes [read self] {
+    pub func bytes() -> Bytes [read self] {
         self.to_le_bytes()
     }
 
     /// Encodes the Unicode scalar as four little-endian bytes without consuming `self`.
-    pub func to_le_bytes(self: Self) -> Bytes [read self] {
+    pub func to_le_bytes() -> Bytes [read self] {
         self.as_int().to_le_bytes().slice(0, 4)
     }
 
     /// Encodes the Unicode scalar as four big-endian bytes without consuming `self`.
-    pub func to_be_bytes(self: Self) -> Bytes [read self] {
+    pub func to_be_bytes() -> Bytes [read self] {
         self.as_int().to_be_bytes().slice(4, 8)
     }
 
     /// Returns the Unicode 17.0.0 General_Category.
-    pub func category(self: Self) -> GeneralCategory {
+    pub func category() -> GeneralCategory {
         let category = unicode::category(self.as_int())
         branch {
             category == 1 -> GeneralCategory.UppercaseLetter
@@ -109,113 +109,113 @@ impl CodePoint {
         }
     }
     /// Tests the Unicode letter property.
-    pub func letter?(self: Self) -> Bool {
+    pub func letter?() -> Bool {
         unicode::property(self.as_int(), 0)
     }
     /// Tests the Unicode alphabetic property.
-    pub func alphabetic?(self: Self) -> Bool {
+    pub func alphabetic?() -> Bool {
         unicode::property(self.as_int(), 1)
     }
     /// Tests the Unicode digit property.
-    pub func digit?(self: Self) -> Bool {
+    pub func digit?() -> Bool {
         unicode::property(self.as_int(), 2)
     }
     /// Tests the Unicode numeric property.
-    pub func numeric?(self: Self) -> Bool {
+    pub func numeric?() -> Bool {
         unicode::property(self.as_int(), 3)
     }
     /// Tests the Unicode lowercase property.
-    pub func lowercase?(self: Self) -> Bool {
+    pub func lowercase?() -> Bool {
         unicode::property(self.as_int(), 4)
     }
     /// Tests the Unicode uppercase property.
-    pub func uppercase?(self: Self) -> Bool {
+    pub func uppercase?() -> Bool {
         unicode::property(self.as_int(), 5)
     }
     /// Tests the Unicode titlecase property.
-    pub func titlecase?(self: Self) -> Bool {
+    pub func titlecase?() -> Bool {
         unicode::property(self.as_int(), 6)
     }
     /// Tests the Unicode mark property.
-    pub func mark?(self: Self) -> Bool {
+    pub func mark?() -> Bool {
         unicode::property(self.as_int(), 7)
     }
     /// Tests the Unicode punctuation property.
-    pub func punctuation?(self: Self) -> Bool {
+    pub func punctuation?() -> Bool {
         unicode::property(self.as_int(), 8)
     }
     /// Tests the Unicode symbol property.
-    pub func symbol?(self: Self) -> Bool {
+    pub func symbol?() -> Bool {
         unicode::property(self.as_int(), 9)
     }
     /// Tests the Unicode separator property.
-    pub func separator?(self: Self) -> Bool {
+    pub func separator?() -> Bool {
         unicode::property(self.as_int(), 10)
     }
     /// Tests the Unicode control property.
-    pub func control?(self: Self) -> Bool {
+    pub func control?() -> Bool {
         unicode::property(self.as_int(), 11)
     }
     /// Tests the Unicode assigned property.
-    pub func assigned?(self: Self) -> Bool {
+    pub func assigned?() -> Bool {
         unicode::property(self.as_int(), 12)
     }
     /// Tests the Unicode identifier_start property.
-    pub func identifier_start?(self: Self) -> Bool {
+    pub func identifier_start?() -> Bool {
         unicode::property(self.as_int(), 13)
     }
     /// Tests the Unicode identifier_part property.
-    pub func identifier_part?(self: Self) -> Bool {
+    pub func identifier_part?() -> Bool {
         unicode::property(self.as_int(), 14)
     }
     /// Tests Alphabetic or any Number category.
-    pub func alphanumeric?(self: Self) -> Bool {
+    pub func alphanumeric?() -> Bool {
         self.alphabetic?() || self.numeric?()
     }
     /// Returns the one-to-one Unicode simple lower mapping.
-    pub func simple_lower(self: Self) -> CodePoint {
+    pub func simple_lower() -> CodePoint {
         unicode::simple_case(self.as_int(), 0)
     }
     /// Returns the one-to-one Unicode simple upper mapping.
-    pub func simple_upper(self: Self) -> CodePoint {
+    pub func simple_upper() -> CodePoint {
         unicode::simple_case(self.as_int(), 1)
     }
     /// Returns the one-to-one Unicode simple title mapping.
-    pub func simple_title(self: Self) -> CodePoint {
+    pub func simple_title() -> CodePoint {
         unicode::simple_case(self.as_int(), 2)
     }
     /// Returns the full default Unicode mapping, which may contain multiple scalars.
-    pub func lower(self: Self) -> String {
+    pub func lower() -> String {
         self.string.lower()
     }
     /// Returns the full default Unicode mapping, which may contain multiple scalars.
-    pub func upper(self: Self) -> String {
+    pub func upper() -> String {
         self.string.upper()
     }
     /// Returns the full default Unicode mapping, which may contain multiple scalars.
-    pub func case_fold(self: Self) -> String {
+    pub func case_fold() -> String {
         self.string.case_fold()
     }
 
     /// Explicitly copies this scalar value.
-    pub func copy(self: Self) -> Self [read self] {
+    pub func copy() -> Self [read self] {
         self
     }
 
     /// Returns the Unicode scalar value represented by this code point.
-    pub func as_int(self: Self) -> Int {
+    pub func as_int() -> Int {
         self
     }
 
     /// Returns the string representation of this code point.
-    pub func as_string(self: Self) -> String {
+    pub func as_string() -> String {
         self.string
     }
 
     /// Creates a code point from a valid Unicode scalar value.
     ///
     /// Returns `None` for negative values, surrogate code points, and values above `0x10FFFF`.
-    pub func from(value: Int) -> Option<CodePoint> {
+    pub static func from(value: Int) -> Option<CodePoint> {
         branch {
             value < 0 -> Option.None
             value > 1114111 -> Option.None

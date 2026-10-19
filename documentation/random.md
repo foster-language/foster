@@ -59,8 +59,8 @@ modulo bias and draw again.
 
 ```foster
 pub type RandomSource = {
-    pub func next(self: Self) -> Result<Int, RandomError> [mut self]
-    pub func maximum(self: Self) -> Int
+    pub func next() -> Result<Int, RandomError> [mut self]
+    pub func maximum() -> Int
 }
 ```
 

@@ -5,7 +5,7 @@ type Item = & Drop & {
     id: Int
 }
 impl Item {
-    func deinit(self: Self) -> () {
+    func deinit() -> () {
         println(self.id)
     }
 }

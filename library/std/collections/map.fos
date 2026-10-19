@@ -45,13 +45,13 @@ pub type Entry<K, V> = {
 pub type MapLookup<K, V> = {
     /// Borrows the stored value; absent keys return `None`. No `Copy` is required.
     /// The reference permits mutation and cannot outlive or survive reshaping its backing storage.
-    pub func borrow(self: Self, key: K) -> Option<ref[self] V> [read self, read key]
+    pub func borrow(key: K) -> Option<ref[self] V> [read self, read key]
 }
 
 /// Key membership without requiring a value type, traversal, or collection updates.
 pub type KeyMembership<K> = {
     /// Tests whether a key is present without consuming or changing the provider.
-    pub func contains_key?(self: Self, key: K) -> Bool [read self, read key]
+    pub func contains_key?(key: K) -> Bool [read self, read key]
 }
 
 /// An associative collection with unique keys and implementation-defined iteration order.
@@ -59,19 +59,19 @@ pub type KeyMembership<K> = {
 /// put consumes and returns the concrete implementation; membership checks borrow it.
 pub type Map<K, V> = & Collection<Entry<K, V>> & MapLookup<K, V> & KeyMembership<K> & {
     /// Removes and returns the owned value, preserving all other entries; absent keys return `None`.
-    pub func remove(self: Self, key: K) -> Option<V> [read key, reshape self]
+    pub func remove(key: K) -> Option<V> [read key, reshape self]
     /// Consumes the map, `key`, and `value`, returning the updated concrete implementation.
     /// Replaces an equal key and releases its previous entry; iteration order depends on the implementation.
-    pub func put(self: Self, key: K, value: V) -> Self [mut self, consume self, consume key, consume value]
+    pub func put(key: K, value: V) -> Self [mut self, consume self, consume key, consume value]
     /// Consumes the map and returns its keys in iteration order.
-    pub func keys(self: Self) -> List<K> [consume self]
+    pub func keys() -> List<K> [consume self]
     /// Consumes the map and returns its values in iteration order.
-    pub func values(self: Self) -> List<V> [consume self]
+    pub func values() -> List<V> [consume self]
 }
 
 impl Map {
     /// Creates an insertion-ordered list-backed map; use HashMap.empty for hashed storage.
-    pub func empty<K, V>() -> ListMap<K, V> {
+    pub static func empty<K, V>() -> ListMap<K, V> {
         ListMap.empty()
     }
 }
@@ -86,7 +86,7 @@ pub type ListMap<K, V> = & Map<K, V> & {
 
 impl ListMap<K, V> {
     /// Creates an empty map.
-    pub func empty() -> ListMap<K, V> {
+    pub static func empty() -> ListMap<K, V> {
         ListMap {
             entries: []
         }
@@ -94,7 +94,7 @@ impl ListMap<K, V> {
 
     /// Borrows the stored value; absent keys return `None`. No `Copy` is required.
     /// The reference permits mutation and cannot outlive or survive reshaping the map.
-    pub func borrow(self: Self, key: K) -> Option<ref[self] V> [read self.entries, read key] {
+    pub func borrow(key: K) -> Option<ref[self] V> [read self.entries, read key] {
         let index = find_index(self.entries, key)
         branch {
             index < 0 -> Option.None
@@ -104,7 +104,7 @@ impl ListMap<K, V> {
 
     /// Removes and returns the owned value, preserving the map and remaining insertion order.
     /// An absent key returns `None` and leaves the map unchanged.
-    pub func remove(self: Self, key: K) -> Option<V> {
+    pub func remove(key: K) -> Option<V> {
         let index = find_index(self.entries, key)
         return Option.None if index < 0
         // Rebuild before replacing storage so traversal retains every unselected entry.
@@ -125,13 +125,13 @@ impl ListMap<K, V> {
     }
 
     /// Returns whether the map contains `key` without consuming the map.
-    pub func contains_key?(self: Self, key: K) -> Bool {
+    pub func contains_key?(key: K) -> Bool {
         find_index(self.entries, key) >= 0
     }
 
     /// Consumes the map, `key`, and `value`, returning the updated map.
     /// Replacing an equal key releases the old entry and preserves its insertion position.
-    pub func put(self: Self, key: K, value: V) -> ListMap<K, V> [mut self.entries, consume key, consume self, consume value] {
+    pub func put(key: K, value: V) -> ListMap<K, V> [mut self.entries, consume key, consume self, consume value] {
         let index = find_index(self.entries, key)
         branch {
             index >= 0 -> {
@@ -149,23 +149,23 @@ impl ListMap<K, V> {
     }
 
     /// Returns the number of entries in the map.
-    pub func length(self: Self) -> Int {
+    pub func length() -> Int {
         self.entries.length
     }
 
     /// Returns whether the map contains no entries.
-    pub func empty?(self: Self) -> Bool {
+    pub func empty?() -> Bool {
         self.entries.empty?
     }
 
     /// Creates an independent iterator in insertion order.
     /// Replacing an existing key does not move its entry to the end.
-    pub func iterator(self: Self) -> Iterator<Entry<K, V>> {
+    pub func iterator() -> Iterator<Entry<K, V>> {
         self.entries.iterator()
     }
 
     /// Consumes the map and returns its keys in storage order.
-    pub func keys(self: Self) -> List<K> [consume self] {
+    pub func keys() -> List<K> [consume self] {
         let result = []
         for entry in self {
             result.push(entry.key)
@@ -174,7 +174,7 @@ impl ListMap<K, V> {
     }
 
     /// Consumes the map and returns its values in storage order.
-    pub func values(self: Self) -> List<V> [consume self] {
+    pub func values() -> List<V> [consume self] {
         let result = []
         for entry in self {
             result.push(entry.value)

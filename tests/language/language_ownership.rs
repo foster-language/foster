@@ -187,7 +187,7 @@ type Counter = {
 }
 
 impl Counter {
-    func increment(self: Counter, amount: Int) -> Int [mut self] {
+    func increment(amount: Int) -> Int [mut self] {
         self.value = self.value + amount
         self.value
     }
@@ -213,11 +213,11 @@ import static core.result.*
 type Formatter = {}
 
 impl Formatter {
-    func render(self: Formatter, value: Int) -> Int {
+    func render(value: Int) -> Int {
         value
     }
 
-    func render(self: Formatter, value: CodePoint) -> Int {
+    func render(value: CodePoint) -> Int {
         42
     }
 }
@@ -242,7 +242,7 @@ import static core.remote_error.*
 type Worker = {}
 
 impl Worker {
-    func check(self: Worker) -> Int {
+    func check() -> Int {
         assert(false, "remote assertion message")
         42
     }
@@ -275,11 +275,11 @@ type Counter = {
 }
 
 impl Counter {
-    func snapshot(self: Counter) -> Int [read self.value] {
+    func snapshot() -> Int [read self.value] {
         self.value
     }
 
-    func assign(self: Counter, value: Int) -> Int [mut self] {
+    func assign(value: Int) -> Int [mut self] {
         self.value = value
         self.value
     }
@@ -310,11 +310,11 @@ type Pair = {
 }
 
 impl Pair {
-    func total(self: Pair) -> Int [read self.left, read self.right] {
+    func total() -> Int [read self.left, read self.right] {
         self.left + self.right
     }
 
-    func replace(self: Pair, value: Int) -> Int [mut self] {
+    func replace(value: Int) -> Int [mut self] {
         self.left = value
         self.right = value
         self.left + self.right
@@ -344,7 +344,7 @@ fn remote_read_loans_reject_mutating_methods() {
 type Counter = { value: Int }
 
 impl Counter {
-    func increment(self: Counter) -> Int [mut self] {
+    func increment() -> Int [mut self] {
         self.value = self.value + 1
         self.value
     }
@@ -375,13 +375,13 @@ type Document = { value: Int }
 type Inspector = {}
 
 impl Inspector {
-    func inspect(self: Inspector, document: Document) -> Int [read document.value] {
+    func inspect(document: Document) -> Int [read document.value] {
         document.value
     }
 }
 
 impl Document {
-    func assign(self: Document, value: Int) -> Int [mut self] {
+    func assign(value: Int) -> Int [mut self] {
         self.value = value
         self.value
     }
@@ -410,13 +410,13 @@ type Pair = { left: Int, right: Int }
 type Inspector = {}
 
 impl Inspector {
-    func total(self: Inspector, pair: Pair) -> Int [read pair.left, read pair.right] {
+    func total(pair: Pair) -> Int [read pair.left, read pair.right] {
         pair.left + pair.right
     }
 }
 
 impl Pair {
-    func replace(self: Pair, value: Int) -> Int [mut self] {
+    func replace(value: Int) -> Int [mut self] {
         self.left = value
         self.right = value
         self.left + self.right
@@ -446,7 +446,7 @@ type Document = { value: Int }
 type Worker = {}
 
 impl Worker {
-    func rewrite(self: Worker, document: Document) -> Int [mut document] {
+    func rewrite(document: Document) -> Int [mut document] {
         document.value = 42
         document.value
     }
@@ -472,7 +472,7 @@ fn remote_calls_reject_borrowed_messages() {
 type Box = { value: Int }
 
 impl Box {
-    func read(self: Box, value: ref[value] Int) -> Int {
+    func read(value: ref[value] Int) -> Int {
         value
     }
 }
@@ -497,7 +497,7 @@ fn remote_calls_require_moves_for_consumed_messages() {
 type Worker = {}
 
 impl Worker {
-    func submit(self: Worker, message: String) -> () [consume message] {
+    func submit(message: String) -> () [consume message] {
         println(message)
     }
 }
@@ -566,7 +566,7 @@ import static core.result.*
 
 type Worker = {}
 impl Worker {
-    func value(self: Worker) -> Int { 1 }
+    func value() -> Int { 1 }
 }
 func wait(worker: Remote<Worker>) -> Int {
     (await worker.value()).unwrap_or(0)
@@ -588,7 +588,7 @@ import static core.result.*
 
 type Worker = {}
 impl Worker {
-    func value(self: Worker) -> Int { 1 }
+    func value() -> Int { 1 }
 }
 func wait(worker: Remote<Worker>) -> Int [suspend] {
     (await worker.value()).unwrap_or(0)
@@ -724,7 +724,7 @@ fn reports_overdeclared_effect_and_suspend_warnings() {
 // λ keeps token ranges byte-accurate
 type Box = { value: Int }
 impl Box {
-    func inspect(self: Box) -> Int [mut self, suspend] { self.value }
+    func inspect() -> Int [mut self, suspend] { self.value }
 }
 func main() { 0 }
 "#;
@@ -808,7 +808,7 @@ type Cursor = {
 }
 
 impl Cursor {
-    func advance(self: Cursor) -> () [mut self] {
+    func advance() -> () [mut self] {
         self.remaining = self.remaining.rest
         self.column = self.column + 1
         ()
@@ -2570,7 +2570,7 @@ import static core.result.*
 
 type Worker = {}
 impl Worker {
-    func value(self: Worker) -> Int { 1 }
+    func value() -> Int { 1 }
 }
 
 func wait(worker: Remote<Worker>) -> Int {
@@ -3024,7 +3024,7 @@ fn arithmetic_failure_cleans_staged_arguments_before_invocation() {
     let source = r#"
 type Receiver = {}
 impl Receiver {
-    func receive(self: Self, value: String, number: Int) -> Int [consume self, consume value] { number }
+    func receive(value: String, number: Int) -> Int [consume self, consume value] { number }
 }
 func checked(borrowed: String, numerator: Int, denominator: Int) -> Int {
     let owned = "owned"
@@ -3080,7 +3080,7 @@ fn bounds_failures_have_cleanup_edges_before_transfer_and_result_initialization(
         r#"
 type Receiver = {}
 impl Receiver {
-    func receive(self: Self, value: String, number: Int) -> Int [consume self, consume value] { number }
+    func receive(value: String, number: Int) -> Int [consume self, consume value] { number }
 }
 func checked(borrowed: List<Int>, index: Int) -> Int {
     let owned = "owned"
@@ -3242,7 +3242,7 @@ import core.result.*
 import static core.result.*
 
 type Worker = {}
-impl Worker { func value(self: Self) -> Int { 42 } }
+impl Worker { func value() -> Int { 42 } }
 func main() -> Int {
     let worker = remote Worker {}
     await worker.value()

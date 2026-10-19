@@ -29,14 +29,14 @@ type Storage = {
 }
 
 impl Box {
-    func copy(self: Self) -> Self {
+    func copy() -> Self {
         Box {
             value: self.value
         }
     }
 }
 impl Storage {
-    func copy(self: Self) -> Self {
+    func copy() -> Self {
         Storage {
             items: self.items.copy_slice(0, self.items.length)
         }

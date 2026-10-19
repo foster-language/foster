@@ -18,34 +18,34 @@ pub type Range<T> = & Sequence<T> & Collection<T> & {
 
 impl Range<T> {
     /// Creates a range view over `values`.
-    pub func from(values: List<T>) -> Range<T> [consume values] {
+    pub static func from(values: List<T>) -> Range<T> [consume values] {
         Range {
             values: move values
         }
     }
 
     /// Returns whether the range is empty.
-    pub func empty?(self: Self) -> Bool {
+    pub func empty?() -> Bool {
         self.values.empty?
     }
 
     /// Returns the number of values remaining in the range.
-    pub func length(self: Self) -> Int {
+    pub func length() -> Int {
         self.values.length
     }
 
     /// Returns the first range value.
-    pub func head(self: Self) -> T {
+    pub func head() -> T {
         self.values.head
     }
 
     /// Returns a sequence containing all values after the head.
-    pub func rest(self: Self) -> Sequence<T> {
+    pub func rest() -> Sequence<T> {
         self.values.rest
     }
 
     /// Creates an independent iterator over the range values.
-    pub func iterator(self: Self) -> Iterator<T> {
+    pub func iterator() -> Iterator<T> {
         self.values.iterator()
     }
 }

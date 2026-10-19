@@ -96,7 +96,7 @@
     "declarations": {
       "patterns": [
         {
-          "match": "\\b(impl)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "match": "\\b(impl)(?:<[^>]*>)?\\s+([A-Za-z_][A-Za-z0-9_]*)",
           "captures": {
             "1": { "name": "keyword.declaration.foster" },
             "2": { "name": "entity.name.type.foster" }

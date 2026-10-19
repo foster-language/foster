@@ -188,7 +188,7 @@ fn generated_c_bridge_runs_on_vm_and_native_with_exact_cleanup() {
         + r#"
 type Audit = { bridge: CBridge }
 impl Audit {
-    func deinit(self: Self) -> () { println(live(self.bridge).unwrap_or(-1)) }
+    func deinit() -> () { println(live(self.bridge).unwrap_or(-1)) }
 }
 func main(arguments: Arguments) -> Result<(), CError> {
     let bridge = CBridge.at(arguments.values[0].copy(), arguments.values[1].copy())

@@ -6,7 +6,7 @@ type Resource = & Drop & {
 }
 
 impl Resource {
-    func deinit(self: Self) -> () {
+    func deinit() -> () {
         println(self.id)
     }
 }

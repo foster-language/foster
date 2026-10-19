@@ -549,6 +549,7 @@ fn function_signature(
         .parameters
         .iter()
         .enumerate()
+        .skip(usize::from(function.receiver.is_some()))
         .map(|(index, local)| {
             let name = &compilation.hir.locals[local.local].name;
             let ty = signature
@@ -570,8 +571,23 @@ fn function_signature(
     });
     let name = function.name.rsplit('.').next().unwrap_or(&function.name);
     format!(
-        "{}func {name}{generics}({parameters}) -&gt; {result}{effects}",
+        "{}{}func {name}{generics}({parameters}) -&gt; {result}{effects}",
         if function.public { "pub " } else { "" },
+        if function.receiver.is_some()
+            && matches!(
+                function
+                    .parameters
+                    .first()
+                    .and_then(|parameter| parameter.ty.as_ref()),
+                Some(crate::ast::TypeExpr::Reference { .. })
+            )
+        {
+            "ref "
+        } else if function.owner.is_some() && function.receiver.is_none() {
+            "static "
+        } else {
+            ""
+        },
     )
 }
 
@@ -618,6 +634,7 @@ fn record_signature(
                 let parameters = method
                     .parameters
                     .iter()
+                    .skip(usize::from(method.receiver))
                     .map(|parameter| match &parameter.ty {
                         Some(ty) => format!("{}: {}", parameter.name, links.source(ty)),
                         None => parameter.name.clone(),
@@ -767,7 +784,7 @@ pub(super) fn escape(value: &str) -> String {
 mod tests {
     #[test]
     fn constrained_signatures_link_requirement_types() {
-        let compilation = crate::compile("pub type Copy = { pub func copy(self: Self) -> Self [read self] }\npub type Box<T> = { value: T }\nimpl Box<T & Copy> { pub func copied(self: Self) -> T [read self] { self.value.copy() } }\nfunc main() -> Int { 42 }").unwrap();
+        let compilation = crate::compile("pub type Copy = { pub func copy() -> Self [read self] }\npub type Box<T> = { value: T }\nimpl Box<T & Copy> { pub func copied() -> T [read self] { self.value.copy() } }\nfunc main() -> Int { 42 }").unwrap();
         let module = compilation.hir.module_named("main").unwrap();
         let method = compilation
             .hir
@@ -813,7 +830,7 @@ import static second.*
 pub type Holder = {
     pub first: one::Box<one::Item>
     pub second: two::Item
-    pub func convert<Item>(self: Self, value: Item) -> Item [read self]
+    pub func convert<Item>(value: Item) -> Item [read self]
 }
 pub enum Outcome = Some(one::Item) | None
 type Hidden = { value: Int }
@@ -848,7 +865,7 @@ func main() -> Int { 0 }
             generic.contains("func generic&lt;Item&gt;(value: consume Item) -&gt; Item"),
             "{generic}"
         );
-        assert!(html.contains("func convert&lt;Item&gt;(self: Self, value: Item) -&gt; Item"));
+        assert!(html.contains("func convert&lt;Item&gt;(value: Item) -&gt; Item"));
         assert!(!html.contains("href=\"#Hidden\""));
         assert!(!html.contains("&lt;a class="));
         std::fs::remove_dir_all(root).unwrap();
@@ -956,16 +973,16 @@ pub const exposed = 42
 const secret = 7
 /// Internal implementation.
 type Internal = { value: Int }
-impl Internal { func inspect(self: Self) -> Int { self.value } }
+impl Internal { func inspect() -> Int { self.value } }
 pub type Example = {
     pub exposed: Int
     hidden: Bool
-    pub func visible(self: Self) -> Int [read self]
-    func internal(self: Self) -> Int [read self]
+    pub func visible() -> Int [read self]
+    func internal() -> Int [read self]
 }
 impl Example {
-    pub func visible(self: Self) -> Int { self.exposed }
-    func internal(self: Self) -> Int { self.exposed }
+    pub func visible() -> Int { self.exposed }
+    func internal() -> Int { self.exposed }
 }
 /// Private overload.
 func convert(value: Int) -> Int { value }

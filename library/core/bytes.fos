@@ -29,9 +29,9 @@ type BytesHost = {}
 
 impl BytesHost {
     /// Packs a Foster byte list into compact storage.
-    func from_list(values: List<Byte>) -> Bytes [consume values] = intrinsic("bytes.from_list")
+    static func from_list(values: List<Byte>) -> Bytes [consume values] = intrinsic("bytes.from_list")
     /// Expands compact storage into a Foster list.
-    func to_list(values: Bytes) -> List<Byte> = intrinsic("bytes.to_list")
+    static func to_list(values: Bytes) -> List<Byte> = intrinsic("bytes.to_list")
 }
 
 /// Immutable binary data backed by compact private host storage.
@@ -42,23 +42,23 @@ pub type Bytes = & Copy & Sequence<Byte> & Collection<Byte> & Equality<Bytes> & 
     value: RawBytes
 
     /// Reads `.bytes`: an independent immutable copy of these bytes, leaving `self` unchanged.
-    pub func bytes(self: Self) -> Bytes [read self]
+    pub func bytes() -> Bytes [read self]
 
     /// Returns an independent immutable byte value.
-    pub func copy(self: Self) -> Self [read self]
+    pub func copy() -> Self [read self]
 
     // Required public operations; implementations live in impl blocks.
     /// Concatenates two immutable byte sequences.
-    pub func concat(self: Self, other: Bytes) -> Bytes [read other, read self]
+    pub func concat(other: Bytes) -> Bytes [read other, read self]
     /// Copies bytes in the half-open range `[start, end)`.
     /// Asserts unless `0 <= start <= end <= length`; bounds are not clamped.
-    pub func slice(self: Self, start: Int, end: Int) -> Bytes [read end, read self, read start]
+    pub func slice(start: Int, end: Int) -> Bytes [read end, read self, read start]
     /// Expands compact bytes into a Foster list.
-    pub func list(self: Self) -> List<Byte> [read self]
+    pub func list() -> List<Byte> [read self]
     /// Encodes bytes as lowercase hexadecimal text.
-    pub func hex(self: Self) -> String [read self]
+    pub func hex() -> String [read self]
     /// Checks UTF-8 scalar boundaries without allocating decoded text or copied suffixes.
-    pub func utf8_valid?(self: Self) -> Bool [read self]
+    pub func utf8_valid?() -> Bool [read self]
 
 }
 
@@ -80,29 +80,29 @@ pub type HexError = {
 
 impl Bytes {
     /// Reads `.bytes`: an independent immutable copy of these bytes, leaving `self` unchanged.
-    pub func bytes(self: Self) -> Bytes [read self] {
+    pub func bytes() -> Bytes [read self] {
         self.copy()
     }
 
     /// Returns an independent immutable byte value.
-    pub func copy(self: Self) -> Self [read self] {
+    pub func copy() -> Self [read self] {
         BytesHost.from_list(BytesHost.to_list(self))
     }
 
     /// Creates an empty immutable byte sequence.
-    pub func empty() -> Bytes {
+    pub static func empty() -> Bytes {
         BytesHost.from_list([])
     }
 
     /// Packs a list of bytes into compact immutable storage.
-    pub func from(values: List<Byte>) -> Bytes [consume values] {
+    pub static func from(values: List<Byte>) -> Bytes [consume values] {
         BytesHost.from_list(move values)
     }
 
     /// Decodes pairs of ASCII hexadecimal digits, accepting uppercase and lowercase.
     /// Empty input succeeds. Whitespace, prefixes such as `0x`, odd lengths, and
     /// non-hexadecimal characters return `HexError`; offset counts Unicode scalars.
-    pub func from_hex(value: String) -> Result<Bytes, HexError> {
+    pub static func from_hex(value: String) -> Result<Bytes, HexError> {
         let characters = value.code_points()
         let output = []
         let offset = 0
@@ -122,7 +122,7 @@ impl Bytes {
     }
 
     /// Concatenates two immutable byte sequences.
-    pub func concat(self: Self, other: Bytes) -> Bytes {
+    pub func concat(other: Bytes) -> Bytes {
         let output = self.list()
         for octet in other {
             output.push(octet)
@@ -132,7 +132,7 @@ impl Bytes {
 
     /// Copies bytes in the half-open range `[start, end)`.
     /// Asserts unless `0 <= start <= end <= length`; bounds are not clamped.
-    pub func slice(self: Self, start: Int, end: Int) -> Bytes {
+    pub func slice(start: Int, end: Int) -> Bytes {
         assert(start >= 0 && end >= start && end <= self.length, "byte slice is out of bounds")
         let output = []
         let index = start
@@ -144,12 +144,12 @@ impl Bytes {
     }
 
     /// Expands compact bytes into a Foster list.
-    pub func list(self: Self) -> List<Byte> {
+    pub func list() -> List<Byte> {
         BytesHost.to_list(self)
     }
 
     /// Encodes bytes as lowercase hexadecimal text.
-    pub func hex(self: Self) -> String {
+    pub func hex() -> String {
         let output = []
         for octet in self {
             let value = octet.int
@@ -165,7 +165,7 @@ impl Bytes {
     }
 
     /// Returns whether two byte sequences contain identical values.
-    pub func equal?(self: Self, other: Bytes) -> Bool {
+    pub func equal?(other: Bytes) -> Bool {
         return false if self.length != other.length
         let index = 0
         while index < self.length {
@@ -176,7 +176,7 @@ impl Bytes {
     }
 
     /// Computes a deterministic hash over the byte sequence.
-    pub func hash(self: Self) -> Int {
+    pub func hash() -> Int {
         let state = 17
         for octet in self {
             state = state + octet
@@ -185,7 +185,7 @@ impl Bytes {
     }
 
     /// Checks UTF-8 scalar boundaries without allocating decoded text or copied suffixes.
-    pub func utf8_valid?(self: Self) -> Bool {
+    pub func utf8_valid?() -> Bool {
         let index = 0
         while index < self.length {
             let first = self[index].int

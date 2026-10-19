@@ -17,7 +17,7 @@ type Payload = {
     pub values: List<Int>
 }
 impl Payload {
-    func copy(self: Self) -> Self {
+    func copy() -> Self {
         Payload {
             values: self.values.copy_slice(0, self.values.length)
         }

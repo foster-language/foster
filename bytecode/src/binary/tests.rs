@@ -434,7 +434,7 @@ import core.result.Result
 import core.remote_error.RemoteError
 type Worker = {}
 impl Worker {
-    func fail(self: Self) -> Int {
+    func fail() -> Int {
         assert(false, "remote")
         42
     }
@@ -490,7 +490,7 @@ fn round_trip_preserves_core_identities_with_same_named_user_records() {
 #[test]
 fn decoder_rejects_a_forged_specialized_method_return_type() {
     let compilation = foster_compiler::compile(
-        "type Echo<T> = { value: T }\nimpl Echo {\n    func get<T>(self: Echo<T>) -> T { self.value }\n}\nfunc main() -> Bool { Echo { value: true }.get() }",
+        "type Echo<T> = { value: T }\nimpl Echo {\n    func get<T>() -> T { self.value }\n}\nfunc main() -> Bool { Echo { value: true }.get() }",
     ).unwrap();
     let program = compile_with_options(&compilation, CompileOptions { optimize: false }).unwrap();
     let mut bytes = encode_program(&program).unwrap();

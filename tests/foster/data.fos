@@ -14,8 +14,8 @@ enum Outcome = Accepted(Int)
     | Rejected(String)
 
 type Identified = {
-    pub func id(self: Self) -> Int [read self]
-    pub func offset(self: Self, amount: Int) -> Int [read self]
+    pub func id() -> Int [read self]
+    pub func offset(amount: Int) -> Int [read self]
 }
 
 type User = & Identified & {
@@ -27,11 +27,11 @@ type Formatter = {}
 type Number = Int
 
 impl User {
-    func id(self: User) -> Int {
+    func id() -> Int {
         self.value
     }
 
-    func offset(self: User, amount: Int) -> Int {
+    func offset(amount: Int) -> Int {
         self.value + amount
     }
 }
@@ -45,15 +45,15 @@ func number() -> Number {
 }
 
 impl Formatter {
-    func render(self: Formatter, value: Int) -> String {
+    func render(value: Int) -> String {
         "int"
     }
 
-    func render(self: Formatter, value: CodePoint) -> String {
+    func render(value: CodePoint) -> String {
         "code point"
     }
 
-    func render(self: Formatter, left: Int, right: Int) -> String {
+    func render(left: Int, right: Int) -> String {
         "pair"
     }
 }

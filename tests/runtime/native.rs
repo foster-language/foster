@@ -206,8 +206,8 @@ enum Maybe<T> = Some(T) | None
 
 func identity<T>(value: T) -> T [consume value] { value }
 func boxed<T>(value: T) -> Boxed<T> [consume value] { Boxed { value } }
-impl Boxed {
-    func unbox<T>(self: Boxed<T>) -> T [consume self] { self.value }
+impl<T> Boxed<T> {
+    func unbox() -> T [consume self] { self.value }
 }
 func value_or<T>(value: Maybe<T>, fallback: T) -> T [consume value, consume fallback] {
     branch value {
@@ -538,20 +538,20 @@ fn dispatches_contract_methods_with_arguments() {
     let compilation = foster::compile(
         r#"
 type Identified = {
-    pub func id(self: Self) -> Int [read self]
-    pub func offset(self: Self, amount: Int) -> Int [read self]
+    pub func id() -> Int [read self]
+    pub func offset(amount: Int) -> Int [read self]
 }
 
 type User = & Identified & { value: Int }
 type Device = & Identified & { value: Int }
 
 impl User {
-    func id(self: User) -> Int { self.value }
-    func offset(self: User, amount: Int) -> Int { self.value + amount }
+    func id() -> Int { self.value }
+    func offset(amount: Int) -> Int { self.value + amount }
 }
 impl Device {
-    func id(self: Device) -> Int { self.value }
-    func offset(self: Device, amount: Int) -> Int { self.value + amount }
+    func id() -> Int { self.value }
+    func offset(amount: Int) -> Int { self.value + amount }
 }
 
 func increment_id(value: Identified) -> Int {
@@ -586,13 +586,13 @@ fn dispatches_generic_contract_implementations() {
     let compilation = foster::compile(
         r#"
 type Renderer<T> = {
-    pub func render(self: Self, value: T) -> String [read self]
+    pub func render(value: T) -> String [read self]
 }
 
 type Formatter<T> = & Renderer<T> & {}
 
-impl Formatter {
-    func render<T>(self: Formatter<T>, value: T) -> String {
+impl<T> Formatter<T> {
+    func render(value: T) -> String {
         "generic"
     }
 }
@@ -622,14 +622,14 @@ func main() -> String { render(Formatter {}) }
 fn dispatches_contracts_to_tagged_variants() {
     let compilation = foster::compile(
         r#"
-type Scored = { pub func score(self: Self) -> Int [read self] }
+type Scored = { pub func score() -> Int [read self] }
 
 enum Choice = Number(Int)
     | Empty
     & Scored
 
 impl Choice {
-    func score(self: Choice) -> Int {
+    func score() -> Int {
         branch self {
             Choice.Number(value) -> value
             Choice.Empty -> 0
@@ -966,27 +966,27 @@ type Snapshot = { value: Int }
 type Echo = {}
 
 impl Counter {
-    func increment(self: Counter, amount: Int) -> Int [mut self] {
+    func increment(amount: Int) -> Int [mut self] {
         self.value = self.value + amount
         self.value
     }
 
-    func snapshot(self: Counter) -> Int [read self.value] { self.value }
-    func assign(self: Counter, value: Int) -> Int [mut self] {
+    func snapshot() -> Int [read self.value] { self.value }
+    func assign(value: Int) -> Int [mut self] {
         self.value = value
         self.value
     }
-    func snapshot_record(self: Counter) -> Snapshot [read self.value] {
+    func snapshot_record() -> Snapshot [read self.value] {
         Snapshot { value: self.value }
     }
 }
 impl Inspector {
-    func inspect(self: Inspector, counter: Counter) -> Int [read counter.value] {
+    func inspect(counter: Counter) -> Int [read counter.value] {
         counter.value
     }
 }
 impl Echo {
-    func tag<T>(self: Echo, value: T) -> Int {
+    func tag<T>(value: T) -> Int {
         value
         1
     }

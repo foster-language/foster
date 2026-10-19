@@ -64,74 +64,75 @@ pub type List<T> = & Sequence<T> & Collection<T> & {
 
     // Required public operations; implementations live in impl blocks.
     /// Appends `value` to this list in place.
-    pub func push(self: Self, value: T) -> () [reshape self.items]
+    pub func push(value: T) -> () [reshape self.items]
     /// Removes all elements, running their required cleanup, while retaining storage capacity.
     /// Requires no Copy capability. Reshapes the list, invalidating element borrows and slices.
-    pub func clear(self: Self) -> () [reshape self.items]
+    pub func clear() -> () [reshape self.items]
     /// Returns this list with `value` appended.
-    pub func append(self: Self, value: T) -> List<T> [consume self]
+    pub func append(value: T) -> List<T> [consume self]
     /// Copies the element at a zero-based index without removing it.
     /// Returns `OutOfBounds` for an invalid index and `NotCopyable` if copying is unsupported.
     /// Bounds are checked first.
-    pub func at(self: Self, index: Int) -> Result<T, ListReadError> [read self]
+    pub func at(index: Int) -> Result<T, ListReadError> [read self]
     /// Returns whether this list contains `expected`.
-    pub func contains?(self: Self, expected: T) -> Bool [read expected, read self]
+    pub func contains?(expected: T) -> Bool [read expected, read self]
     /// Copies the first element, or returns `None` when it is absent or not copyable.
-    pub func first(self: Self) -> Option<T> [read self]
+    pub func first() -> Option<T> [read self]
     /// Copies the final element, or returns `None` when it is absent or not copyable.
-    pub func last(self: Self) -> Option<T> [read self]
+    pub func last() -> Option<T> [read self]
     /// Applies `transform` to every element, from left to right.
-    pub func map<U>(self: Self, transform: func(T) -> U) -> List<U> [read self, read transform]
+    pub func map<U>(transform: func(T) -> U) -> List<U> [read self, read transform]
     /// Returns independent copies of elements for which `include` evaluates to true.
     /// Visits left to right, copying each element before calling `include` once.
     /// Asserts if any visited element lacks Copy, even when the predicate would reject it.
-    pub func filter(self: Self, include: Predicate<T>) -> List<T> [read include, read self]
+    pub func filter(include: Predicate<T>) -> List<T> [read include, read self]
     /// Reduces the list from left to right, beginning with `initial`.
     /// Copies each element before passing it and the owned accumulator to `combine`.
     /// Asserts if an element lacks Copy; an empty list returns `initial` unchanged.
-    pub func fold<U>(self: Self, initial: U, combine: func(consume U, consume T) -> U) -> U [consume initial, read self]
+    pub func fold<U>(initial: U, combine: func(consume U, consume T) -> U) -> U [consume initial, read self]
     /// Returns an independent copy of the first matching element, or None if none matches.
     /// Copies each visited element before calling `predicate`, stopping at the first match.
     /// Asserts if a visited element lacks Copy; later elements are not inspected.
-    pub func find(self: Self, predicate: Predicate<T>) -> Option<T> [read predicate, read self]
+    pub func find(predicate: Predicate<T>) -> Option<T> [read predicate, read self]
     /// Returns whether any element satisfies `predicate`, stopping at the first match.
     /// Returns false for an empty list.
-    pub func any?(self: Self, predicate: Predicate<T>) -> Bool [read predicate, read self]
+    pub func any?(predicate: Predicate<T>) -> Bool [read predicate, read self]
     /// Returns whether every element satisfies `predicate`, stopping at the first failure.
     /// Returns true for an empty list.
-    pub func all?(self: Self, predicate: Predicate<T>) -> Bool [read predicate, read self]
+    pub func all?(predicate: Predicate<T>) -> Bool [read predicate, read self]
     /// Builds a reversed list of independent element copies, preserving the source.
     /// Asserts if an element lacks Copy. Visits right to left and allocates one result list.
-    pub func reverse(self: Self) -> List<T> [read self]
+    pub func reverse() -> List<T> [read self]
     /// Appends independent copies of every element of `right`, consuming the left list.
     /// Asserts if an element of `right` lacks Copy; left elements need no copying.
-    pub func concat(self: Self, right: List<T>) -> List<T> [consume self, read right]
+    pub func concat(right: List<T>) -> List<T> [consume self, read right]
     /// Borrows the stored element; invalid indexes return None. No Copy is required.
     /// The reference permits mutation and cannot outlive or survive reshaping the list.
-    pub func borrow(self: Self, index: Int) -> Option<ref[self] T> [read self]
+    pub func borrow(index: Int) -> Option<ref[self] T> [read self]
     /// Removes and returns an owned element, preserving the list and remaining order.
     /// Invalid indexes return None without changing the list. Takes O(n) time.
-    pub func remove(self: Self, index: Int) -> Option<T> [mut self, reshape self.items]
+    pub func remove(index: Int) -> Option<T> [mut self, reshape self.items]
+
     /// Borrows a constant-time view of the half-open range `[start, end)` without copying elements.
     /// Asserts unless `0 <= start <= end <= length`. The view cannot outlive or survive reshaping the source.
-    pub func slice(self: Self, start: Int, end: Int) -> Slice<ref[self] List<T>> [read end, read self, read start]
+    pub func slice(start: Int, end: Int) -> Slice<ref[self] List<T>> [read end, read self, read start]
     /// Copies at most the first `count` elements; a nonpositive count returns an empty list.
     /// Asserts if a selected element lacks Copy; preserves the source.
-    pub func take(self: Self, count: Int) -> List<T> [read count, read self]
+    pub func take(count: Int) -> List<T> [read count, read self]
     /// Consumes the list and returns the elements after the first `count` entries.
     /// A nonpositive count preserves all elements; a count at least the length returns empty.
     /// For an interior count, copies the retained suffix and asserts if it lacks Copy.
-    pub func drop(self: Self, count: Int) -> List<T> [consume self]
+    pub func drop(count: Int) -> List<T> [consume self]
     /// Maps elements left to right and copies each returned list's elements into one result list.
     /// Calls `transform` once per input element. Asserts if a returned element lacks Copy.
-    pub func flat_map<U>(self: Self, transform: func(T) -> List<U>) -> List<U> [read self, read transform]
+    pub func flat_map<U>(transform: func(T) -> List<U>) -> List<U> [read self, read transform]
     /// Counts the elements satisfying `predicate`.
-    pub func count(self: Self, predicate: Predicate<T>) -> Int [read predicate, read self]
+    pub func count(predicate: Predicate<T>) -> Int [read predicate, read self]
     /// Returns whether no element satisfies `predicate`.
-    pub func none?(self: Self, predicate: Predicate<T>) -> Bool [read predicate, read self]
+    pub func none?(predicate: Predicate<T>) -> Bool [read predicate, read self]
     /// Combines independent copies left to right, or returns `None` for an empty list.
     /// Asserts if an input element lacks Copy. A singleton returns its copy without calling `combine`.
-    pub func reduce(self: Self, combine: func(T, T) -> T) -> Option<T> [read combine, read self]
+    pub func reduce(combine: func(T, T) -> T) -> Option<T> [read combine, read self]
 
 }
 
@@ -149,19 +150,18 @@ pub type Slice<Storage> = {
     pub length: Int
 }
 
-impl Slice<T> {
+impl<T> Slice<ref[self] List<T>> {
     /// Borrows an element at a zero-based index within this view; invalid indexes return None.
     /// The reference cannot outlive the view or survive reshaping its source.
-    pub func borrow(self: Slice<ref[self] List<T>>, index: Int) -> Option<ref[self] T> {
+    pub func borrow(index: Int) -> Option<ref[self] T> {
         branch {
             index < 0 || index >= self.length -> Option.None
             _ -> self.source.borrow(self.start + index)
         }
     }
-
     /// Creates an independent cursor yielding borrowed elements, without requiring Copy.
     /// The cursor cannot outlive this view or survive reshaping its source.
-    pub func iterator(self: Slice<ref[self] List<T>>) -> SliceIterator<ref[self] Slice<ref[self] List<T>>> {
+    pub func iterator() -> SliceIterator<ref[self] Slice<ref[self] List<T>>> {
         SliceIterator {
             source: ref self, index: self.start, end: self.start + self.length
         }
@@ -175,9 +175,9 @@ pub type SliceIterator<Storage> = {
     end: Int
 }
 
-impl SliceIterator<T> {
+impl<T> SliceIterator<ref[self] Slice<ref[self] List<T>>> {
     /// Advances the cursor and borrows the next element, or returns None after exhaustion.
-    pub func next(self: ref[self] SliceIterator<ref[self] Slice<ref[self] List<T>>>) -> Option<ref[self] T> {
+    pub ref func next() -> Option<ref[self] T> {
         return Option.None if self.index >= self.end
         let index = self.index
         self.index = self.index + 1
@@ -188,7 +188,7 @@ impl SliceIterator<T> {
 impl List<T & Copy> {
     /// Copies the half-open range [start, end) into an independent list, preserving the source.
     /// Available only when T implements Copy. Asserts unless 0 <= start <= end <= length.
-    pub func copy_slice(self: Self, start: Int, end: Int) -> List<T> {
+    pub func copy_slice(start: Int, end: Int) -> List<T> {
         assert(start >= 0 && end >= start && end <= self.length, "List.copy_slice requires 0 <= start <= end <= length")
         let result = []
         let index = start
@@ -202,19 +202,19 @@ impl List<T & Copy> {
 
 impl List<T> {
     /// Appends `value` to this list in place.
-    pub func push(self: Self, value: T) -> () [reshape self.items] = intrinsic("list.push")
+    pub func push(value: T) -> () [reshape self.items] = intrinsic("list.push")
 
     /// Removes all elements, running their required cleanup, while retaining storage capacity.
     /// Requires no Copy capability. Reshapes the list, invalidating element borrows and slices.
-    pub func clear(self: Self) -> () [reshape self.items] = intrinsic("list.clear")
+    pub func clear() -> () [reshape self.items] = intrinsic("list.clear")
 
     /// Returns this list with `value` appended.
-    pub func append(self: Self, value: T) -> List<T> [consume self] = intrinsic("list.append")
+    pub func append(value: T) -> List<T> [consume self] = intrinsic("list.append")
 
     /// Copies the element at a zero-based index without removing it.
     /// Returns `OutOfBounds` for an invalid index and `NotCopyable` if copying is unsupported.
     /// Bounds are checked first.
-    pub func at(self: Self, index: Int) -> Result<T, ListReadError> [read self] {
+    pub func at(index: Int) -> Result<T, ListReadError> [read self] {
         branch {
             index < 0 || index >= self.length -> Result.Error(ListReadError.OutOfBounds)
             !self.can_copy_at(index) -> Result.Error(ListReadError.NotCopyable)
@@ -223,19 +223,19 @@ impl List<T> {
     }
 
     /// Tests the runtime Copy capability of an in-bounds element.
-    func can_copy_at(self: Self, index: Int) -> Bool [read self] = intrinsic("list.can_copy_at")
+    func can_copy_at(index: Int) -> Bool [read self] = intrinsic("list.can_copy_at")
     /// Invokes Copy after the caller checks bounds and capability.
-    func copy_at(self: Self, index: Int) -> T [read self] = intrinsic("list.copy_at")
+    func copy_at(index: Int) -> T [read self] = intrinsic("list.copy_at")
 
     /// Collection algorithms that produce owned elements require Copy.
-    func read_at(self: Self, index: Int) -> T [read self] {
+    func read_at(index: Int) -> T [read self] {
         assert(index >= 0 && index < self.length, "list index is out of bounds")
         assert(self.can_copy_at(index), "list operation requires Copy to return owned elements while preserving the source; use borrow or slice to access elements by reference")
         self.copy_at(index)
     }
 
     /// Returns whether this list contains `expected`.
-    pub func contains?(self: Self, expected: T) -> Bool {
+    pub func contains?(expected: T) -> Bool {
         let index = 0
         while index < self.length {
             return true if self[index] == expected
@@ -245,7 +245,7 @@ impl List<T> {
     }
 
     /// Copies the first element, or returns `None` when it is absent or not copyable.
-    pub func first(self: Self) -> Option<T> {
+    pub func first() -> Option<T> {
         branch self.at(0) {
             Result.Ok(value) -> Option.Some(value)
             Result.Error(_) -> Option.None
@@ -253,7 +253,7 @@ impl List<T> {
     }
 
     /// Copies the final element, or returns `None` when it is absent or not copyable.
-    pub func last(self: Self) -> Option<T> {
+    pub func last() -> Option<T> {
         branch self.at(self.length - 1) {
             Result.Ok(value) -> Option.Some(value)
             Result.Error(_) -> Option.None
@@ -261,7 +261,7 @@ impl List<T> {
     }
 
     /// Applies `transform` to every element, from left to right.
-    pub func map<U>(self: Self, transform: func(T) -> U) -> List<U> {
+    pub func map<U>(transform: func(T) -> U) -> List<U> {
         let result = []
         let index = 0
         while index < self.length {
@@ -274,7 +274,7 @@ impl List<T> {
     /// Returns independent copies of elements for which `include` evaluates to true.
     /// Visits left to right, copying each element before calling `include` once.
     /// Asserts if any visited element lacks Copy, even when the predicate would reject it.
-    pub func filter(self: Self, include: Predicate<T>) -> List<T> {
+    pub func filter(include: Predicate<T>) -> List<T> {
         let result = []
         let index = 0
         while index < self.length {
@@ -288,7 +288,7 @@ impl List<T> {
     /// Reduces the list from left to right, beginning with `initial`.
     /// Copies each element before passing it and the owned accumulator to `combine`.
     /// Asserts if an element lacks Copy; an empty list returns `initial` unchanged.
-    pub func fold<U>(self: Self, initial: U, combine: func(consume U, consume T) -> U) -> U [consume initial, read self] {
+    pub func fold<U>(initial: U, combine: func(consume U, consume T) -> U) -> U [consume initial, read self] {
         let result = move initial
         let index = 0
         while index < self.length {
@@ -301,7 +301,7 @@ impl List<T> {
     /// Returns an independent copy of the first matching element, or None if none matches.
     /// Copies each visited element before calling `predicate`, stopping at the first match.
     /// Asserts if a visited element lacks Copy; later elements are not inspected.
-    pub func find(self: Self, predicate: Predicate<T>) -> Option<T> {
+    pub func find(predicate: Predicate<T>) -> Option<T> {
         let index = 0
         while index < self.length {
             let value = self.read_at(index)
@@ -313,7 +313,7 @@ impl List<T> {
 
     /// Returns whether any element satisfies `predicate`, stopping at the first match.
     /// Returns false for an empty list.
-    pub func any?(self: Self, predicate: Predicate<T>) -> Bool {
+    pub func any?(predicate: Predicate<T>) -> Bool {
         let index = 0
         while index < self.length {
             return true if predicate(self[index])
@@ -324,7 +324,7 @@ impl List<T> {
 
     /// Returns whether every element satisfies `predicate`, stopping at the first failure.
     /// Returns true for an empty list.
-    pub func all?(self: Self, predicate: Predicate<T>) -> Bool {
+    pub func all?(predicate: Predicate<T>) -> Bool {
         let index = 0
         while index < self.length {
             return false if !predicate(self[index])
@@ -335,7 +335,7 @@ impl List<T> {
 
     /// Builds a reversed list of independent element copies, preserving the source.
     /// Asserts if an element lacks Copy. Visits right to left and allocates one result list.
-    pub func reverse(self: Self) -> List<T> {
+    pub func reverse() -> List<T> {
         let result = []
         let index = self.length
         while index > 0 {
@@ -347,7 +347,7 @@ impl List<T> {
 
     /// Appends independent copies of every element of `right`, consuming the left list.
     /// Asserts if an element of `right` lacks Copy; left elements need no copying.
-    pub func concat(self: Self, right: List<T>) -> List<T> [consume self, read right] {
+    pub func concat(right: List<T>) -> List<T> [consume self, read right] {
         let result = move self
         let index = 0
         while index < right.length {
@@ -359,7 +359,7 @@ impl List<T> {
 
     /// Borrows the stored element; invalid indexes return None. No Copy is required.
     /// The reference permits mutation and cannot outlive or survive reshaping the list.
-    pub func borrow(self: Self, index: Int) -> Option<ref[self] T> [read self] {
+    pub func borrow(index: Int) -> Option<ref[self] T> [read self] {
         branch {
             index < 0 || index >= self.length -> Option.None
             _ -> Option.Some(ref self[index])
@@ -368,7 +368,7 @@ impl List<T> {
 
     /// Removes and returns an owned element, preserving the list and remaining order.
     /// Invalid indexes return None without changing the list. Takes O(n) time.
-    pub func remove(self: ref[self] List<T>, index: Int) -> Option<T> [mut self, reshape self.items] {
+    pub ref func remove(index: Int) -> Option<T> [mut self, reshape self.items] {
         return Option.None if index < 0 || index >= self.length
         let removed = Option.None
         let entries = removal_entries(self)
@@ -395,7 +395,7 @@ impl List<T> {
 
     /// Borrows a constant-time view of the half-open range `[start, end)` without copying elements.
     /// Asserts unless `0 <= start <= end <= length`. The view cannot outlive or survive reshaping the source.
-    pub func slice(self: Self, start: Int, end: Int) -> Slice<ref[self] List<T>> {
+    pub func slice(start: Int, end: Int) -> Slice<ref[self] List<T>> {
         assert(start >= 0 && end >= start && end <= self.length, "List.slice requires 0 <= start <= end <= length")
         Slice {
             source: ref self, start, length: end - start
@@ -403,7 +403,7 @@ impl List<T> {
     }
 
     /// Copies a range for algorithms whose unconstrained element capability is checked at runtime.
-    func copy_range(self: Self, start: Int, end: Int) -> List<T> {
+    func copy_range(start: Int, end: Int) -> List<T> {
         assert(start >= 0 && end >= start && end <= self.length, "list copy range requires 0 <= start <= end <= length")
         let result = []
         let index = start
@@ -416,7 +416,7 @@ impl List<T> {
 
     /// Copies at most the first `count` elements; a nonpositive count returns an empty list.
     /// Asserts if a selected element lacks Copy; preserves the source.
-    pub func take(self: Self, count: Int) -> List<T> {
+    pub func take(count: Int) -> List<T> {
         let end = branch {
             count < 0 -> 0
             count > self.length -> self.length
@@ -428,7 +428,7 @@ impl List<T> {
     /// Consumes the list and returns the elements after the first `count` entries.
     /// A nonpositive count preserves all elements; a count at least the length returns empty.
     /// For an interior count, copies the retained suffix and asserts if it lacks Copy.
-    pub func drop(self: Self, count: Int) -> List<T> [consume self] {
+    pub func drop(count: Int) -> List<T> [consume self] {
         return self if count <= 0
         return [] if count >= self.length
         self.copy_range(count, self.length)
@@ -436,7 +436,7 @@ impl List<T> {
 
     /// Maps elements left to right and copies each returned list's elements into one result list.
     /// Calls `transform` once per input element. Asserts if a returned element lacks Copy.
-    pub func flat_map<U>(self: Self, transform: func(T) -> List<U>) -> List<U> {
+    pub func flat_map<U>(transform: func(T) -> List<U>) -> List<U> {
         let result = []
         let index = 0
         while index < self.length {
@@ -452,7 +452,7 @@ impl List<T> {
     }
 
     /// Counts the elements satisfying `predicate`.
-    pub func count(self: Self, predicate: Predicate<T>) -> Int {
+    pub func count(predicate: Predicate<T>) -> Int {
         let count = 0
         let index = 0
         while index < self.length {
@@ -463,13 +463,13 @@ impl List<T> {
     }
 
     /// Returns whether no element satisfies `predicate`.
-    pub func none?(self: Self, predicate: Predicate<T>) -> Bool {
+    pub func none?(predicate: Predicate<T>) -> Bool {
         !self.any?(predicate)
     }
 
     /// Combines independent copies left to right, or returns `None` for an empty list.
     /// Asserts if an input element lacks Copy. A singleton returns its copy without calling `combine`.
-    pub func reduce(self: Self, combine: func(T, T) -> T) -> Option<T> {
+    pub func reduce(combine: func(T, T) -> T) -> Option<T> {
         return Option.None if self.empty?
         let result = self.read_at(0)
         let index = 1
@@ -481,10 +481,10 @@ impl List<T> {
     }
 }
 
-impl List {
+impl<T> List<List<T>> {
     /// Copies nested lists' elements in source order into one result list.
     /// Asserts if an inner element lacks Copy; preserves the source lists.
-    pub func flatten<T>(self: List<List<T>>) -> List<T> {
+    pub func flatten() -> List<T> {
         let result = []
         let index = 0
         while index < self.length {
@@ -497,9 +497,11 @@ impl List {
         }
         result
     }
+}
 
+impl<> List<String> {
     /// Joins strings into one byte builder, inserting separators only between elements.
-    pub func join(self: List<String>, separator: String) -> String {
+    pub func join(separator: String) -> String {
         let output = StringBuilder.empty()
         let index = 0
         while index < self.length {
@@ -542,4 +544,14 @@ test "clear empties lists and permits repeated reuse" {
     let empty = values.take(0)
     empty.clear()
     assert(empty.length == 0)
+}
+
+test "remove replaces caller storage and preserves element order" {
+    let values = [10, 20, 30]
+    assert(values.remove(1) == Option.Some(20))
+    assert(values == [10, 30])
+    assert(values.remove(1) == Option.Some(30))
+    assert(values.remove(0) == Option.Some(10))
+    assert(values.empty?)
+    assert(values.remove(0) == Option.None)
 }

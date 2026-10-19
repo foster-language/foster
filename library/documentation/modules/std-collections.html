@@ -6,8 +6,8 @@ when an algorithm only counts elements, and Iterable<T> when it only traverses.<
 
 type CountOnly = { count: Int }
 impl CountOnly {
-    func length(self: Self) -&gt; Int { self.count }
-    func empty?(self: Self) -&gt; Bool { self.count == 0 }
+    func length() -&gt; Int { self.count }
+    func empty?() -&gt; Bool { self.count == 0 }
 }
 func size(value: Sized) -&gt; Int { value.length() }
 func main() -&gt; Int {
@@ -27,8 +27,8 @@ No iteration, element type, or element copying capability is required.</p>
 Creating an iterator borrows the collection and produces an independent cursor
 over its read-only value view. Consumers needing only sizing should require Sized.</p>
 <a class="back-to-navigation" href="#page-navigation">↑ On this page</a></article><article id="Sized"><h2><a class="anchor" href="#Sized">Sized</a><span class="badge kind">type</span><span class="badge visibility-public">public</span></h2><pre><code>pub type Sized = {
-    pub func length(self: Self) -&gt; <a class="type-link" href="core-int.html#Int" title="core.int.Int">Int</a>
-    pub func empty?(self: Self) -&gt; <a class="type-link" href="core-bool.html#module-overview" title="core.bool.module-overview">Bool</a>
+    pub func length() -&gt; <a class="type-link" href="core-int.html#Int" title="core.int.Int">Int</a>
+    pub func empty?() -&gt; <a class="type-link" href="core-bool.html#module-overview" title="core.bool.module-overview">Bool</a>
 }</code></pre><p>A value with a known nonnegative number of elements.
 Sizing borrows the value; empty? must agree with length() == 0.
 No iteration, element type, or element copying capability is required.</p>

@@ -155,6 +155,7 @@ pub struct Function {
     pub module: ModuleId,
     pub name: String,
     pub owner: Option<String>,
+    pub owner_type: Option<ast::TypeExpr>,
     pub receiver: Option<LocalId>,
     pub test_description: Option<String>,
     pub public: bool,

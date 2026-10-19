@@ -25,21 +25,21 @@ import std.path.Path
 /// Supplies located file resources. Implementations choose their own resource type.
 pub type FileProvider<F> = {
     /// Resolves a location to a resource without requiring an OS file handle.
-    pub func file(self: Self, location: paths::Path) -> Result<F, IoError> [read self, consume location]
+    pub func file(location: paths::Path) -> Result<F, IoError> [read self, consume location]
 }
 
 /// Supplies outgoing connections, including application-defined stream types.
 /// Does not require endpoint binding or a listener type.
 pub type Connector<C> = {
     /// Connects to an endpoint using this provider's namespace and policy.
-    pub func connect(self: Self, address: String, port: Int) -> Result<C, NetworkError> [read self, consume address]
+    pub func connect(address: String, port: Int) -> Result<C, NetworkError> [read self, consume address]
 }
 
 /// Supplies bound listeners, including application-defined listener types.
 /// Does not require outgoing connections or a connected-stream type.
 pub type ListenerProvider<L> = {
     /// Binds an endpoint using this provider's namespace and policy.
-    pub func listen(self: Self, address: String, port: Int) -> Result<L, NetworkError> [read self, consume address]
+    pub func listen(address: String, port: Int) -> Result<L, NetworkError> [read self, consume address]
 }
 
 /// Supplies both outgoing connections and bound listeners.
@@ -53,19 +53,19 @@ pub type RuntimeHost = & FileProvider<File> & NetworkProvider<Connection, Listen
 
 impl RuntimeHost {
     /// Creates an adapter without performing host I/O.
-    pub func new() -> RuntimeHost {
+    pub static func new() -> RuntimeHost {
         RuntimeHost {}
     }
     /// Creates a located file; actual I/O may subsequently fail.
-    pub func file(self: Self, location: paths::Path) -> Result<File, IoError> [consume location] {
+    pub func file(location: paths::Path) -> Result<File, IoError> [consume location] {
         Result.Ok(File.at(move location))
     }
     /// Connects through the installed runtime provider.
-    pub func connect(self: Self, address: String, port: Int) -> Result<Connection, NetworkError> [consume address] {
+    pub func connect(address: String, port: Int) -> Result<Connection, NetworkError> [consume address] {
         tcp::connect(move address, port)
     }
     /// Binds through the installed runtime provider.
-    pub func listen(self: Self, address: String, port: Int) -> Result<Listener, NetworkError> [consume address] {
+    pub func listen(address: String, port: Int) -> Result<Listener, NetworkError> [consume address] {
         tcp::listen(move address, port)
     }
 }

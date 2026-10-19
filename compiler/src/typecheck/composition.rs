@@ -672,7 +672,7 @@ impl Checker<'_> {
         }
         let Some(receiver) = requirement.parameters.first() else {
             return Err(FosterError::runtime(format!(
-                "required method `{}.{}` must declare `self` as its first parameter",
+                "required method `{}.{}` requires an implicit instance receiver",
                 owner_name, requirement.name
             )));
         };
@@ -680,7 +680,7 @@ impl Checker<'_> {
             || !matches!(receiver.ty.as_ref(), Some(crate::ast::TypeExpr::Named(name, arguments)) if name == "Self" && arguments.is_empty())
         {
             return Err(FosterError::runtime(format!(
-                "required method `{}.{}` must begin with `self: Self`",
+                "required method `{}.{}` must be an instance method; `static func` is not a structural method requirement",
                 owner_name, requirement.name
             )));
         }

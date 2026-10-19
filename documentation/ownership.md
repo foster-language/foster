@@ -1,6 +1,6 @@
 # Foster Ownership and Borrowing
 
-Language version 21, ownership-model version 5.
+Language version 23, ownership-model version 5.
 
 This document describes Foster's ownership model, its source-level behavior, and how the compiler
 implements it today. It is intentionally separate from
@@ -129,8 +129,8 @@ import core.drop.Drop
 
 type Item = & Copy & Drop & { id: Int }
 impl Item {
-    func copy(self: Self) -> Self { Item { id: self.id } }
-    func deinit(self: Self) -> () { println(self.id) }
+    func copy() -> Self { Item { id: self.id } }
+    func deinit() -> () { println(self.id) }
 }
 ```
 
@@ -259,8 +259,11 @@ A returned reference can be passed directly to another reference parameter, eith
 call expression or through a local binding. The call retains its existing group and origin;
 it does not add another reference layer or extend the origin's lifetime.
 
-`self` is the first parameter of an instance method and follows exactly the same group rule
-as every other parameter. A function without a `self` parameter cannot name that group.
+`self` is the implicit first parameter of an instance method and follows the same group
+rule as every other parameter. Module and static functions cannot name that group.
+An ordinary implicit receiver is a borrowed value parameter. `ref func` instead
+provides an explicit reference receiver, allowing replacement of the caller's whole
+binding. `Self` remains the implemented value type, and `self` retains its storage group.
 Compiler-created closure functions derive group effects from their reference captures.
 Method results may expose `ref[self] T`, including inside `Option`, to borrow from
 the argument passed as `self`. Such results remain tied to that argument's lifetime; reshaping or consuming

@@ -11,26 +11,26 @@ import core.bytes.Bytes
 
 impl Byte {
     /// Reads `.bytes`: a one-byte immutable sequence, leaving `self` unchanged.
-    pub func bytes(self: Self) -> Bytes [read self] {
+    pub func bytes() -> Bytes [read self] {
         Bytes.from([self])
     }
 
     /// Explicitly copies this scalar value.
-    pub func copy(self: Self) -> Self [read self] {
+    pub func copy() -> Self [read self] {
         self
     }
 
     /// Returns whether an integer fits in a byte.
-    pub func valid(value: Int) -> Bool {
+    pub static func valid(value: Int) -> Bool {
         value >= 0 && value <= 255
     }
 
     /// Constructs a byte from a value known to be in the inclusive range `0..255`.
     /// Invalid input fails at runtime; use `from` to receive a typed `ByteError`.
-    pub func unchecked(value: Int) -> Byte = intrinsic("byte.unchecked")
+    pub static func unchecked(value: Int) -> Byte = intrinsic("byte.unchecked")
 
     /// Converts an integer in the inclusive range 0 through 255 to `Byte`.
-    pub func from(value: Int) -> Result<Byte, ByteError> {
+    pub static func from(value: Int) -> Result<Byte, ByteError> {
         return Result.Ok(Byte.unchecked(value)) if Byte.valid(value)
         Result.Error(ByteError {
             value, message: "Byte must be between 0 and 255"

@@ -18,6 +18,7 @@ pub struct Implementation {
     pub span: std::ops::Range<usize>,
     pub owner_span: std::ops::Range<usize>,
     pub owner: String,
+    pub target: Option<TypeExpr>,
     pub parameters: Vec<String>,
     pub constraints: Vec<TypeConstraint>,
 }
@@ -137,6 +138,7 @@ pub struct Function {
     pub documentation: Option<String>,
     pub name: String,
     pub owner: Option<String>,
+    pub owner_type: Option<TypeExpr>,
     pub receiver: bool,
     pub public: bool,
     pub intrinsic: Option<String>,

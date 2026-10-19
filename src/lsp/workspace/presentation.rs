@@ -200,7 +200,7 @@ pub(super) fn function_signature(
 ) -> String {
     let function = &compilation.hir.functions[function_id];
     let signature = compilation.types.function_type(function_id);
-    let skip = usize::from(omit_receiver);
+    let skip = usize::from(omit_receiver || function.receiver.is_some());
     let parameters = function
         .parameters
         .iter()
@@ -249,8 +249,23 @@ pub(super) fn function_signature(
     );
     let name = function.name.rsplit('.').next().unwrap_or(&function.name);
     let signature = format!(
-        "{}func {name}{generics}({parameters}) -> {result}{effects}",
+        "{}{}func {name}{generics}({parameters}) -> {result}{effects}",
         if function.public { "pub " } else { "" },
+        if function.receiver.is_some()
+            && matches!(
+                function
+                    .parameters
+                    .first()
+                    .and_then(|parameter| parameter.ty.as_ref()),
+                Some(crate::ast::TypeExpr::Reference { .. })
+            )
+        {
+            "ref "
+        } else if function.owner.is_some() && function.receiver.is_none() {
+            "static "
+        } else {
+            ""
+        },
     );
     match &function.owner {
         Some(owner) => format!("impl {owner} {{\n    {signature}\n}}"),
@@ -314,6 +329,7 @@ fn method_requirement_signature(method: &crate::ast::MethodRequirement) -> Strin
     let parameters = method
         .parameters
         .iter()
+        .skip(usize::from(method.receiver))
         .map(|parameter| match &parameter.ty {
             Some(ty) => format!("{}: {}", parameter.name, display_type_expr(ty)),
             None => parameter.name.clone(),

@@ -1,37 +1,37 @@
 pub type Bar = {
-    pub value: Int, pub func fighter(self: Self) -> Int
+    pub value: Int, pub func fighter() -> Int
 }
 pub type Monkey = {
-    pub value: Int, pub func fighter(self: Self) -> Int
+    pub value: Int, pub func fighter() -> Int
 }
 impl Bar {
-    pub func fighter(self: Self) -> Int {
+    pub func fighter() -> Int {
         self.value + 1
     }
-    pub func twice(self: Self) -> Int {
+    pub func twice() -> Int {
         self.fighter() * 2
     }
 }
 impl Monkey {
-    pub func fighter(self: Self) -> Int {
+    pub func fighter() -> Int {
         self.value + 2
     }
 }
 type Foo = & Bar & Monkey & {}
 type Reverse = & Monkey & Bar & {}
 pub type Requirement = {
-    pub func fighter(self: Self) -> Int
+    pub func fighter() -> Int
 }
 type Required = & Bar & Requirement & {}
 pub type Local = & Bar & Monkey & {}
 impl Local {
-    pub func fighter(self: Self) -> Int {
+    pub func fighter() -> Int {
         self.value + 3
     }
 }
 pub type NumberDefault = {}
 impl NumberDefault {
-    pub func number(self: Self) -> Int {
+    pub func number() -> Int {
         42
     }
 }

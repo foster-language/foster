@@ -27,11 +27,11 @@ pub type Uri = & ResourceIdentifier & {
 
     // Required public operations; implementations live in impl blocks.
     /// Returns the complete URI text.
-    pub func as_string(self: Self) -> String [read self.value]
+    pub func as_string() -> String [read self.value]
     /// Returns the scheme spelling supplied to the parser.
-    pub func scheme(self: Self) -> String [read self.scheme_value]
+    pub func scheme() -> String [read self.scheme_value]
     /// Returns the resource portion following the URI scheme separator.
-    pub func path(self: Self) -> String [read self.path_value]
+    pub func path() -> String [read self.path_value]
 }
 
 impl Uri {
@@ -39,7 +39,7 @@ impl Uri {
     /// The scheme starts with a letter and then permits letters, digits, `+`, `-`, and `.`.
     /// Returns `UriError` for missing or invalid schemes; it does not validate percent escapes,
     /// authorities, paths, queries, or fragments. Scheme spelling is not normalized.
-    pub func parse(value: String) -> Result<Uri, UriError> {
+    pub static func parse(value: String) -> Result<Uri, UriError> {
         branch {
             value.empty? -> invalid_uri(move value, "URI must not be empty")
             not scheme_start?(value.scalar_head()) -> invalid_uri(move value, "URI scheme must begin with an ASCII letter")
@@ -48,27 +48,27 @@ impl Uri {
     }
 
     /// Builds a URI from an already separated scheme and resource path.
-    pub func from_parts(scheme: String, path: String) -> Result<Uri, UriError> {
+    pub static func from_parts(scheme: String, path: String) -> Result<Uri, UriError> {
         Uri.parse(scheme + ":" + path)
     }
 
     /// Returns the complete URI text.
-    pub func as_string(self: Self) -> String {
+    pub func as_string() -> String {
         self.value.scalar_slice(0, self.value.scalar_length())
     }
 
     /// Returns the stable identifier supplied to a protocol provider.
-    pub func resource_id(self: Self) -> String {
+    pub func resource_id() -> String {
         self.as_string()
     }
 
     /// Returns the scheme spelling supplied to the parser.
-    pub func scheme(self: Self) -> String {
+    pub func scheme() -> String {
         self.scheme_value.scalar_slice(0, self.scheme_value.scalar_length())
     }
 
     /// Returns the resource portion following the URI scheme separator.
-    pub func path(self: Self) -> String {
+    pub func path() -> String {
         self.path_value.scalar_slice(0, self.path_value.scalar_length())
     }
 }

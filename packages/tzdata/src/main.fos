@@ -19,24 +19,24 @@ import data
 /// A provider backed by the IANA release bundled into this library.
 pub type IanaDatabase = & TimeZoneDatabase & {
     /// Returns the exact IANA release bundled into this provider.
-    pub func version(self: Self) -> String
+    pub func version() -> String
     /// Lists canonical identifiers and aliases in bytewise sorted order.
-    pub func identifiers(self: Self) -> List<String>
+    pub func identifiers() -> List<String>
 }
 
 impl IanaDatabase {
     /// Creates a database without host I/O.
-    pub func new() -> IanaDatabase {
+    pub static func new() -> IanaDatabase {
         IanaDatabase {}
     }
 
     /// Returns the exact IANA release used by this provider.
-    pub func version(self: Self) -> String {
+    pub func version() -> String {
         data::version()
     }
 
     /// Looks up a case-sensitive IANA identifier or alias; unknown names return ZoneError.
-    pub func find(self: Self, identifier: String) -> Result<TimeZone, ZoneError> [read identifier] {
+    pub func find(identifier: String) -> Result<TimeZone, ZoneError> [read identifier] {
         let index = lookup(data::names().bytes, identifier)
         branch {
             index < 0 -> Result.Error(ZoneError {
@@ -49,7 +49,7 @@ impl IanaDatabase {
     }
 
     /// Returns every supported identifier, including aliases, in sorted order.
-    pub func identifiers(self: Self) -> List<String> {
+    pub func identifiers() -> List<String> {
         let encoded = data::names().bytes
         let names = []
         let index = 0
@@ -68,17 +68,17 @@ pub type IanaZone = & TimeZone & {
 
 impl IanaZone {
     /// Preserves the requested identifier, including aliases.
-    pub func id(self: Self) -> String {
+    pub func id() -> String {
         self.identifier.copy()
     }
 
     /// Finds the active historical offset or evaluates the recurring future rules.
-    pub func offset_at(self: Self, instant: Instant) -> Offset {
+    pub func offset_at(instant: Instant) -> Offset {
         checked_offset(offset_seconds(self.table, instant.epoch_seconds()))
     }
 
     /// Resolves a local value as unique, overlapping, or skipped, preserving nanoseconds.
-    pub func resolve(self: Self, local: DateTime) -> LocalResolution {
+    pub func resolve(local: DateTime) -> LocalResolution {
         resolve_local(self.table, local)
     }
 }

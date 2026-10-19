@@ -7,11 +7,11 @@ type Square = {
 }
 
 impl Square {
-    func area(self: Self) -> Int {
+    func area() -> Int {
         self.length * self.width
     }
 
-    func set_width(self: Self, width: Int) -> () {
+    func set_width(width: Int) -> () {
         self.width = width
         self.total_area = self.length * width
         println()

@@ -482,7 +482,7 @@ Foster values or another execution context. Callback and embedded-execution save
 cleanup continue to update the same slot. Functions without post-call checks acquire no handle.
 Cancellation polls continue to return their own failure status, avoiding a duplicate query.
 
-`deinit(self: Self) -> ()` runs once at ownership end before child values are
+`deinit() -> ()` runs once at ownership end before child values are
 released. Compiler-owned Copy/Drop dispatch slots select concrete implementations, and generated
 layout destructors invoke the callback while the receiver is intact. A header flag transfers the
 cleanup obligation across internal copy-on-write updates and prevents recursive invocation.

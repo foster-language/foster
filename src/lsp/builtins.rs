@@ -24,8 +24,8 @@ pub(super) fn info(id: Builtin) -> BuiltinInfo {
         ),
         Builtin::ListClear => builtin(
             "List.clear",
-            "List.clear(self: Self) -> ()",
-            &["self"],
+            "List.clear() -> ()",
+            &[],
             "Removes list elements and runs their cleanup while retaining capacity.",
         ),
         Builtin::ProcessExchange

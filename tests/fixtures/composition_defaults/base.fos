@@ -1,15 +1,15 @@
 pub type Base = {
     pub value: Int
-    pub func fighter(self: Self) -> Int
+    pub func fighter() -> Int
 }
 func helper(value: Int) -> Int {
     value + 1
 }
 impl Base {
-    pub func fighter(self: Self) -> Int {
+    pub func fighter() -> Int {
         helper(self.value)
     }
-    pub func doubled(self: Self) -> Int {
+    pub func doubled() -> Int {
         self.fighter() * 2
     }
 }

@@ -1218,7 +1218,7 @@ mod tests {
     #[test]
     fn publishes_compiler_warnings() {
         let diagnostics = diagnostics(
-            "type Box = { value: Int }\nimpl Box {\n    func inspect(self: Box) -> Int [mut self] { self.value }\n}",
+            "type Box = { value: Int }\nimpl Box {\n    func inspect() -> Int [mut self] { self.value }\n}",
         );
         assert_eq!(diagnostics.len(), 1);
         assert_eq!(diagnostics[0].severity, Some(DiagnosticSeverity::WARNING));
@@ -1226,7 +1226,7 @@ mod tests {
             diagnostics[0].code,
             Some(lsp_types::NumberOrString::String("unused-effect".into()))
         );
-        assert_eq!(diagnostics[0].range.start, Position::new(2, 36));
-        assert_eq!(diagnostics[0].range.end, Position::new(2, 44));
+        assert_eq!(diagnostics[0].range.start, Position::new(2, 27));
+        assert_eq!(diagnostics[0].range.end, Position::new(2, 35));
     }
 }

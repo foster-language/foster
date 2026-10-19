@@ -13,7 +13,7 @@ pub type CopyItem = {
 }
 
 impl CopyItem {
-    pub func copy(self: Self) -> Self [read self.value] {
+    pub func copy() -> Self [read self.value] {
         CopyItem {
             value: self.value + 1
         }

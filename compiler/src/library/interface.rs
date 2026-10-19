@@ -181,6 +181,7 @@ pub(super) fn build(
                 documentation: function.documentation.clone(),
                 name: binding.symbol.name.name.clone(),
                 owner: function.owner.clone(),
+                owner_type: None,
                 receiver: descriptor.receiver,
                 public: binding.public,
                 intrinsic: function.intrinsic.clone(),

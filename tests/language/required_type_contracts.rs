@@ -14,10 +14,10 @@ fn composition_rejects_conflicting_modes_for_the_same_parameter_types() {
     ] {
         let source = format!(
             r#"
-type Borrowing = {{ pub func accept(self: Self, value: String) -> Int }}
-type Consuming = {{ pub func accept(self: Self, value: String) -> Int [consume value] }}
+type Borrowing = {{ pub func accept(value: String) -> Int }}
+type Consuming = {{ pub func accept(value: String) -> Int [consume value] }}
 {declaration}
-impl Combined {{ func accept(self: Self, value: String) -> Int {{ 42 }} }}
+impl Combined {{ func accept(value: String) -> Int {{ 42 }} }}
 func main() -> Int {{ {value}.accept("test") }}
 "#
         );
@@ -36,23 +36,20 @@ fn impl_only_methods_do_not_become_requirements() {
     let source = r#"
 type Original = {
     pub value: Int
-    pub func required(self: Self) -> Int
+    pub func required() -> Int
 }
 impl Original {
-    func required(self: Original) -> Int { self.value }
-    func extra(self: Original) -> Int { 100 }
+    func required() -> Int { self.value }
+    func extra() -> Int { 100 }
 }
 type Combined = & Original & {}
 impl Combined {
-    func required(self: Combined) -> Int { self.value }
+    func required() -> Int { self.value }
 }
 func main() -> Int { Combined { value: 42 }.required() }
 "#;
     assert_eq!(foster::run(source).unwrap(), Value::Integer(42));
-    let missing = source.replace(
-        "    func required(self: Combined) -> Int { self.value }",
-        "",
-    );
+    let missing = source.replace("    func required() -> Int { self.value }", "");
     assert!(
         foster::compile(&missing)
             .unwrap_err()
@@ -65,11 +62,11 @@ func main() -> Int { Combined { value: 42 }.required() }
 fn required_methods_have_independent_type_parameters() {
     let source = r#"
 type Identity = {
-    pub func apply<T>(self: Self, value: T) -> T [consume value]
+    pub func apply<T>(value: T) -> T [consume value]
 }
 type Implementation = & Identity & {}
 impl Implementation {
-    func apply<U>(self: Implementation, value: U) -> U [consume value] { value }
+    func apply<U>(value: U) -> U [consume value] { value }
 }
 func through(identity: Identity) -> Int {
     assert(identity.apply(true))
@@ -79,8 +76,8 @@ func main() -> Int { through(Implementation {}) }
 "#;
     assert_eq!(foster::run(source).unwrap(), Value::Integer(42));
     let specialized = source.replace(
-        "func apply<U>(self: Implementation, value: U) -> U",
-        "func apply(self: Implementation, value: Int) -> Int",
+        "func apply<U>(value: U) -> U",
+        "func apply(value: Int) -> Int",
     );
     let error = foster::compile(&specialized).unwrap_err();
     assert!(
@@ -224,11 +221,11 @@ fn contract_audit_distinguishes_constrained_impl_methods() {
 import core.copy.Copy
 pub type Box<T> = { pub value: T }
 impl Box<T> {
-    pub func ordinary(self: Self) -> Int { 42 }
-    pub func generic<U>(self: Self, value: U) -> U [consume value] { move value }
+    pub func ordinary() -> Int { 42 }
+    pub func generic<U>(value: U) -> U [consume value] { move value }
 }
 impl Box<T & Copy> {
-    pub func copied(self: Self) -> T { self.value.copy() }
+    pub func copied() -> T { self.value.copy() }
 }
 func main() -> Int { Box { value: 42 }.copied() }
 "#,

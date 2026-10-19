@@ -3,11 +3,14 @@ pub type Box<T> = {
 }
 
 impl Box {
-    pub func create<T>(value: T) -> Box<T> {
+    pub static func create<T>(value: T) -> Box<T> {
         Box { value }
     }
+}
 
-    pub func unwrap<T>(self: Box<T>) -> T {
+impl<T> Box<T> {
+
+    pub func unwrap() -> T {
         self.value
     }
 }

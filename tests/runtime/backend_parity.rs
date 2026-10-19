@@ -305,7 +305,7 @@ import core.result
 import core.result.*
 import static core.result.*
 type Resource = & Drop & { id: Int }
-impl Resource { func deinit(self: Self) -> () { println(self.id) } }
+impl Resource { func deinit() -> () { println(self.id) } }
 func take(value: Resource) -> () [consume value] { () }
 func produce() -> Resource { Resource { id: 3 } }
 func exercise(flag: Bool) -> () {
@@ -369,9 +369,9 @@ import core.drop
 import core.drop.*
 import static core.drop.*
 type Resource = & Drop & { id: Int }
-impl Resource { func deinit(self: Self) -> () { println(self.id) } }
+impl Resource { func deinit() -> () { println(self.id) } }
 type Pair = & Drop & { first: Resource, second: Resource }
-impl Pair { func deinit(self: Self) -> () { println(99) } }
+impl Pair { func deinit() -> () { println(99) } }
 func fail() -> Resource { panic("unfinished") }
 func main() {
     let pair = Pair { first: Resource { id: 8 }, second: ?? }
@@ -429,7 +429,7 @@ import core.drop
 import core.drop.*
 import static core.drop.*
 type Resource = & Drop & { id: Int }
-impl Resource { func deinit(self: Self) -> () { println(self.id) } }
+impl Resource { func deinit() -> () { println(self.id) } }
 func main() {
     let outer = Resource { id: 1 }
     :request {
@@ -482,9 +482,9 @@ import core.drop.*
 import static core.drop.*
 type Item = { value: Int }
 impl Item {
-    func copy(self: Self) -> Self { println(1)
+    func copy() -> Self { println(1)
         Item { value: self.value } }
-    func deinit(self: Self) -> () { println(2) }
+    func deinit() -> () { println(2) }
 }
 func inspect<T>(value: T) -> Int [read value] {
     branch value {
@@ -564,8 +564,8 @@ import std.collections.hash_map.*
 import static std.collections.hash_map.*
 type Item = & Copy & Drop & { id: Int }
 impl Item {
-    func copy(self: Self) -> Self { Item { id: self.id + 10 } }
-    func deinit(self: Self) -> () { println(self.id) }
+    func copy() -> Self { Item { id: self.id + 10 } }
+    func deinit() -> () { println(self.id) }
 }
 func exercise(values: Map<Int, Item>) -> () [reshape values] {
     branch values.borrow(1) {
@@ -663,10 +663,10 @@ fn reordered_generic_intersection_dispatch_runs_on_both_backends() {
 type A<T> = { pub first: T }
 type B<T> = { pub second: T }
 type Item = { pub first: Int, pub second: Bool }
-type Contract = { pub func apply<T, U>(self: Self, value: A<T> & B<U>, marker: T) -> Int }
+type Contract = { pub func apply<T, U>(value: A<T> & B<U>, marker: T) -> Int }
 type Implementation = & Contract & {}
 impl Implementation {
-    func apply<X, Y>(self: Implementation, value: B<Y> & A<X>, marker: X) -> Int { 42 }
+    func apply<X, Y>(value: B<Y> & A<X>, marker: X) -> Int { 42 }
 }
 
 func through(receiver: Contract, value: Item) -> Int { receiver.apply(value, 5) }
@@ -684,24 +684,24 @@ fn concrete_intersection_arguments_preserve_borrow_and_consume_cleanup() {
 import core.drop
 import core.drop.*
 import static core.drop.*
-type A = { pub func first(self: Self) -> Int }
-type B = { pub func second(self: Self) -> Int }
+type A = { pub func first() -> Int }
+type B = { pub func second() -> Int }
 type Item = & A & B & Drop & { value: Int }
 impl Item {
-    func first(self: Item) -> Int { self.value }
-    func second(self: Item) -> Int { self.value }
-    func deinit(self: Item) -> () { println(99) }
+    func first() -> Int { self.value }
+    func second() -> Int { self.value }
+    func deinit() -> () { println(99) }
 }
 type Contract = {
-    pub func read(self: Self, value: A & B) -> Int
-    pub func take(self: Self, value: A & B) -> Int [consume value]
+    pub func read(value: A & B) -> Int
+    pub func take(value: A & B) -> Int [consume value]
 }
 type Implementation = & Contract & {}
 impl Implementation {
-    func read(self: Implementation, value: B & A) -> Int {
+    func read(value: B & A) -> Int {
         value.first() + value.second()
     }
-    func take(self: Implementation, value: B & A) -> Int [consume value] {
+    func take(value: B & A) -> Int [consume value] {
         value.first() + value.second()
     }
 }
@@ -1191,7 +1191,7 @@ import static core.result.*
 type Plain = { value: Int }
 type Item = & Copy & { value: Int }
 impl Item {
-    func copy(self: Self) -> Self { Item { value: self.value + 1 } }
+    func copy() -> Self { Item { value: self.value + 1 } }
 }
 func checked(values: List<Int>, index: Int) -> Result<Int, ListReadError> {
     let value = try values.at(index)
@@ -1229,11 +1229,11 @@ import core.copy.*
 import static core.copy.*
 type Tracked = & Drop & Copy & { id: Int }
 impl Tracked {
-    func copy(self: Self) -> Self { Tracked { id: self.id + 10 } }
-    func deinit(self: Self) -> () { println(self.id) }
+    func copy() -> Self { Tracked { id: self.id + 10 } }
+    func deinit() -> () { println(self.id) }
 }
 type Outer = & Drop & { child: Tracked }
-impl Outer { func deinit(self: Self) -> () { println(100) } }
+impl Outer { func deinit() -> () { println(100) } }
 func finish_value(value: Tracked) -> () [consume value] { println(200) }
 func scope() -> () {
     let value = Tracked { id: 1 }
@@ -1280,8 +1280,8 @@ import core.byte.*
 import static core.byte.*
 type Item = & Drop & { id: Int }
 impl Item {
-    func deinit(self: Self) -> () { println(self.id) }
-    func receive(self: Self, argument: Item, value: Int, later: Item) -> Int [consume self, consume argument, consume later] {
+    func deinit() -> () { println(self.id) }
+    func receive(argument: Item, value: Int, later: Item) -> Int [consume self, consume argument, consume later] {
         println(999)
         value
     }
@@ -1380,7 +1380,7 @@ import core.drop
 import core.drop.*
 import static core.drop.*
 type Item = & Drop & { id: Int }
-impl Item { func deinit(self: Self) -> () { println(self.id) } }
+impl Item { func deinit() -> () { println(self.id) } }
 func finish_value(value: Item) -> () [consume value] { println(60) }
 func early() -> () { let item = Item { id: 7 }
  return () if true
@@ -1430,11 +1430,11 @@ import core.result.*
 import static core.result.*
 type Item = & Drop & Copy & { id: Int }
 impl Item {
-    func copy(self: Self) -> Self { Item { id: self.id + 10 } }
-    func deinit(self: Self) -> () { println(self.id) }
+    func copy() -> Self { Item { id: self.id + 10 } }
+    func deinit() -> () { println(self.id) }
 }
 type Resource = & Drop & { id: Int }
-impl Resource { func deinit(self: Self) -> () { println(self.id) } }
+impl Resource { func deinit() -> () { println(self.id) } }
 func read_first<T>(values: List<T>) -> Result<T, ListReadError> { values.at(0) }
 func main() -> Int {
     let values = [Item { id: 1 }]
@@ -1465,7 +1465,7 @@ import core.drop.*
 import static core.drop.*
 enum Choice = Value(Int) | Empty & Drop
 impl Choice {
-    func deinit(self: Self) -> () {
+    func deinit() -> () {
         branch self { Choice.Value(value) -> println(value)
  Choice.Empty -> println(0) }
     }
@@ -1548,7 +1548,7 @@ func use_socket(connection: Connection, mode: Int) -> Result<(), NetworkError> [
     Result.Ok(())
 }}
 impl Worker {{
-    func execute(self: Self, mode: Int) -> Result<(), NetworkError> {{
+    func execute(mode: Int) -> Result<(), NetworkError> {{
         let connection = try tcp::connect("127.0.0.1", {port})
         use_socket(move connection, mode)
     }}
@@ -1766,7 +1766,7 @@ import core.drop
 import core.drop.*
 import static core.drop.*
 type Held = & Drop & { id: Int }
-impl Held { func deinit(self: Self) -> () { println(self.id) } }
+impl Held { func deinit() -> () { println(self.id) } }
 func main() -> Int {
     let cursor = [Held { id: 1 }, Held { id: 2 }].iterator()
     branch cursor.next() {
@@ -1933,10 +1933,10 @@ import core.string.*
 import static core.string.*
 type TextSlice = & Sequence<String> & { text: String }
 impl TextSlice {
-    func empty?(self: Self) -> Bool { self.text.empty? }
-    func length(self: Self) -> Int { self.text.length }
-    func head(self: Self) -> String { self.text.head }
-    func rest(self: Self) -> String { self.text.rest }
+    func empty?() -> Bool { self.text.empty? }
+    func length() -> Int { self.text.length }
+    func head() -> String { self.text.head }
+    func rest() -> String { self.text.rest }
 }
 func letters(values: Sequence<String>) -> List<String> [consume values] {
     let cursor = Iterator.from_sequence(move values)
@@ -1973,7 +1973,7 @@ import core.drop
 import core.drop.*
 import static core.drop.*
 type Held = & Drop & { text: String }
-impl Held { func deinit(self: Self) -> () { println(self.text) } }
+impl Held { func deinit() -> () { println(self.text) } }
 func main() -> Int {
     let held = Held { text: "cleaned" }
     let cursor = [1, 2, 3].iterator().map((value: Int) -> {
@@ -2036,7 +2036,7 @@ fn assignment_evaluates_the_value_before_the_destination() {
 type Trace = { value: Int }
 
 impl Trace {
-    func mark(self: Trace, digit: Int) -> Int [mut self.value] {
+    func mark(digit: Int) -> Int [mut self.value] {
         self.value = self.value * 10 + digit
         digit
     }
@@ -2063,12 +2063,12 @@ type Sink = {}
 type Pair = { a: Int, z: Int }
 
 impl Trace {
-    func mark(self: Trace, digit: Int) -> Int [mut self.value] {
+    func mark(digit: Int) -> Int [mut self.value] {
         self.value = self.value * 10 + digit
         digit
     }
 
-    func reset(self: Trace) -> () [mut self.value] {
+    func reset() -> () [mut self.value] {
         self.value = 0
         ()
     }
@@ -2076,28 +2076,28 @@ impl Trace {
 func combine(left: Int, right: Int) -> Int { left * 10 + right }
 
 impl Trace {
-    func callable(self: Trace) -> func(Int, Int) -> Int [mut self.value] {
+    func callable() -> func(Int, Int) -> Int [mut self.value] {
         self.mark(1)
         combine
     }
 
-    func sink(self: Trace) -> Sink [mut self.value] {
+    func sink() -> Sink [mut self.value] {
         self.mark(1)
         Sink {}
     }
 }
 
 impl Sink {
-    func accept(self: Sink, value: Int) -> Int { value }
+    func accept(value: Int) -> Int { value }
 }
 
 impl Trace {
-    func values(self: Trace) -> List<Int> [mut self.value] {
+    func values() -> List<Int> [mut self.value] {
         self.mark(1)
         [7]
     }
 
-    func record(self: Trace, digit: Int, answer: Bool) -> Bool [mut self.value] {
+    func record(digit: Int, answer: Bool) -> Bool [mut self.value] {
         self.mark(digit)
         answer
     }
@@ -2156,12 +2156,12 @@ type Trace = { value: Int }
 type Sink = {}
 
 impl Trace {
-    func mark(self: Trace, digit: Int) -> Int [mut self.value] {
+    func mark(digit: Int) -> Int [mut self.value] {
         self.value = self.value * 10 + digit
         digit
     }
 
-    func reset(self: Trace) -> () [mut self.value] {
+    func reset() -> () [mut self.value] {
         self.value = 0
         ()
     }
@@ -2172,19 +2172,19 @@ func combine(left: Int, middle: Int, right: Int) -> Int {
 }
 
 impl Trace {
-    func callable(self: Trace) -> func(Int, Int, Int) -> Int [mut self.value] {
+    func callable() -> func(Int, Int, Int) -> Int [mut self.value] {
         self.mark(1)
         combine
     }
 
-    func sink(self: Trace) -> Sink [mut self.value] {
+    func sink() -> Sink [mut self.value] {
         self.mark(1)
         Sink {}
     }
 }
 
 impl Sink {
-    func accept(self: Sink, prefix: Int, value: Int) -> Int { prefix * 10 + value }
+    func accept(prefix: Int, value: Int) -> Int { prefix * 10 + value }
 }
 
 func main() -> Int {
@@ -2258,7 +2258,7 @@ import static core.result.*
 
 type Counter = { value: Int }
 impl Counter {
-    func increment(self: Counter, amount: Int) -> Int [mut self] {
+    func increment(amount: Int) -> Int [mut self] {
         self.value = self.value + amount
         self.value
     }
@@ -2291,8 +2291,8 @@ fn generic_calls_preserve_values() {
         "generics",
         r#"
 type Echo<T> = { value: T }
-impl Echo {
-    func get<T>(self: Echo<T>) -> T { self.value }
+impl<T> Echo<T> {
+    func get() -> T { self.value }
 }
 func identity<T>(value: T) -> T { value }
 func main() -> Bool { identity(Echo { value: true }.get()) }
@@ -2312,8 +2312,8 @@ import static core.result.*
 
 type Echo = {}
 impl Echo {
-    func identity<T>(self: Echo, value: T) -> T { value }
-    func tag<T>(self: Echo, value: T) -> Int { 1 }
+    func identity<T>(value: T) -> T { value }
+    func tag<T>(value: T) -> Int { 1 }
 }
 func main() -> Int {
     let worker = remote Echo {}
@@ -2339,7 +2339,7 @@ fn nested_remote_awaits_preserve_native_frames_and_owned_values() {
 #[test]
 fn verifier_rejects_inconsistent_specialized_call_results() {
     for source in [
-        "type Echo<T> = { value: T }\nimpl Echo {\n    func get<T>(self: Echo<T>) -> T { self.value }\n}\nfunc main() -> Bool { Echo { value: true }.get() }",
+        "type Echo<T> = { value: T }\nimpl Echo {\n    func get<T>() -> T { self.value }\n}\nfunc main() -> Bool { Echo { value: true }.get() }",
         "func identity<T>(value: T) -> T { value }\nfunc main() -> Bool { identity(true) }",
     ] {
         let compilation = foster::compile(source).unwrap();
@@ -2374,15 +2374,15 @@ import core.remote_error.*
 import static core.remote_error.*
 type Worker = { value: Int }
 impl Worker {
-    func good(self: Self) -> Int { self.value }
-    func domain(self: Self) -> Result<Int, String> { Result.Error("domain") }
-    func fail(self: Self) -> Int {
+    func good() -> Int { self.value }
+    func domain() -> Result<Int, String> { Result.Error("domain") }
+    func fail() -> Int {
         self.value = 9
         assert(false, "worker failed")
         self.value = 100
         100
     }
-    func later(self: Self, text: String) -> String [consume text] { text }
+    func later(text: String) -> String [consume text] { text }
 }
 func main() -> Int {
     let worker = remote Worker { value: 42 }
@@ -2410,7 +2410,7 @@ fn discarded_remote_requests_require_completion_before_owner_exit() {
     let error = foster::compile(
         r#"
  type Worker = {}
- impl Worker { func fail(self: Self) -> () { assert(false) } }
+ impl Worker { func fail() -> () { assert(false) } }
  func main() -> Int { let worker = remote Worker {}
  worker.fail()
  42 }
@@ -2435,9 +2435,9 @@ import core.drop
 import core.drop.*
 import static core.drop.*
 type Held = & Drop & {}
-impl Held { func deinit(self: Self) -> () { println("closed") } }
+impl Held { func deinit() -> () { println("closed") } }
 type Worker = { held: Held }
-impl Worker { func value(self: Self) -> Int { 42 } }
+impl Worker { func value() -> Int { 42 } }
 func completed() -> Future<Result<Int, RemoteError>> {
     let worker = remote Worker { held: Held {} }
     let earlier = worker.value()
@@ -2462,10 +2462,10 @@ import core.remote_error.*
 import static core.remote_error.*
 type Worker = {}
 impl Worker {
-    func barrier(self: Self) -> Int { 0 }
-    func forever(self: Self) -> Int { loop {}
+    func barrier() -> Int { 0 }
+    func forever() -> Int { loop {}
 0 }
-    func queued(self: Self) -> Int { assert(false, "queued work started")
+    func queued() -> Int { assert(false, "queued work started")
 0 }
 }
 type Job = {
@@ -2566,7 +2566,7 @@ import static core.float.*
 func nested(value: Int) -> {result_type} {{ {expression} }}
 type Worker = {{}}
 impl Worker {{
-    func fail(self: Self) -> {result_type} {{
+    func fail() -> {result_type} {{
         let value = nested(1)
         println("must not continue after failure")
         value
@@ -2596,11 +2596,11 @@ import core.remote_error.*
 import static core.remote_error.*
 type Worker = { value: Int }
 impl Worker {
-    func check(self: Self) -> Int {
+    func check() -> Int {
         assert(self.value != 0, "borrowed failure")
         self.value
     }
-    func set(self: Self, value: Int) { self.value = value }
+    func set(value: Int) { self.value = value }
 }
 func main() -> Bool {
     let state = Worker { value: 0 }
@@ -2627,8 +2627,8 @@ import core.remote_error.*
 import static core.remote_error.*
 type Worker = {}
 impl Worker {
-    func get(self: Self, value: Int) -> Int { value }
-    func get(self: Self, value: CodePoint) -> Int {
+    func get(value: Int) -> Int { value }
+    func get(value: CodePoint) -> Int {
         assert(false, "overloaded failure")
         0
     }
@@ -2651,7 +2651,7 @@ import core.drop.*
 import static core.drop.*
 type Item = & Drop & { id: Int }
 impl Item {
-    func deinit(self: Self) -> () {
+    func deinit() -> () {
         println(self.id)
         assert(self.id != 2, "cleanup failed")
     }
@@ -2685,7 +2685,7 @@ import core.drop
 import core.drop.*
 import static core.drop.*
 type Item = & Drop & { id: Int }
-impl Item { func deinit(self: Self) -> () { println(self.id) } }
+impl Item { func deinit() -> () { println(self.id) } }
 type Box = { child: Item }
 func finish_value(value: Item) -> () [consume value] { println(10) }
 func main() -> Int {
@@ -2714,10 +2714,10 @@ import core.result
 import core.result.*
 import static core.result.*
 type Item = & Drop & { id: Int }
-impl Item { func deinit(self: Self) -> () { println(self.id) } }
+impl Item { func deinit() -> () { println(self.id) } }
 type Worker = { id: Int }
 impl Worker {
-    func inspect(self: Self, item: Item) -> Int [consume item] {
+    func inspect(item: Item) -> Int [consume item] {
         println(10)
         item.id
     }
@@ -2742,7 +2742,7 @@ import core.drop
 import core.drop.*
 import static core.drop.*
 type Item = & Drop & { id: Int }
-impl Item { func deinit(self: Self) -> () { println(self.id) } }
+impl Item { func deinit() -> () { println(self.id) } }
 func inspect(value: Item) -> Int { println(10)
     value.id }
 func later() -> Int { println(20)
@@ -2763,19 +2763,19 @@ func main() -> Int {
 fn invalid_destructors_and_partial_moves_are_rejected() {
     for (source, expected) in [
         (
-            "type Item = { id: Int }\nimpl Item { func deinit(self: Self) -> Int { 0 } }",
+            "type Item = { id: Int }\nimpl Item { func deinit() -> Int { 0 } }",
             "deinit must return ()",
         ),
         (
-            "type Item = { id: Int }\nimpl Item { func deinit(self: Self) -> () {} }\nfunc main() -> () { Item { id: 1 }.deinit() }",
+            "type Item = { id: Int }\nimpl Item { func deinit() -> () {} }\nfunc main() -> () { Item { id: 1 }.deinit() }",
             "cannot be called directly",
         ),
         (
-            "type Item = { name: String }\nimpl Item { func deinit(self: Self) -> () {} }\nfunc main() -> String { let item = Item { name: \"x\" }\nmove item.name }",
+            "type Item = { name: String }\nimpl Item { func deinit() -> () {} }\nfunc main() -> String { let item = Item { name: \"x\" }\nmove item.name }",
             "cannot move a field",
         ),
         (
-            "import core.copy\nimport core.copy.*\nimport static core.copy.*\ntype Item = & Copy & { id: Int }\nimpl Item { func copy(self: Self) -> Int { 1 } }\nfunc require_copy(value: Copy) -> () {}\nfunc main() -> () { require_copy(Item { id: 1 }) }",
+            "import core.copy\nimport core.copy.*\nimport static core.copy.*\ntype Item = & Copy & { id: Int }\nimpl Item { func copy() -> Int { 1 } }\nfunc require_copy(value: Copy) -> () {}\nfunc main() -> () { require_copy(Item { id: 1 }) }",
             "type `Int` cannot adapt to `Item`",
         ),
     ] {
@@ -2800,11 +2800,11 @@ import core.copy.*
 import static core.copy.*
 type Empty = & Drop & Copy & {}
 impl Empty {
-    func copy(self: Self) -> Self { Empty {} }
-    func deinit(self: Self) -> () { println(1) }
+    func copy() -> Self { Empty {} }
+    func deinit() -> () { println(1) }
 }
 type Item = & Drop & { id: Int }
-impl Item { func deinit(self: Self) -> () { println(self.id) } }
+impl Item { func deinit() -> () { println(self.id) } }
 enum Parcel = Packed(Item)
 func main() -> Int {
     let original = Empty {}
@@ -2939,7 +2939,7 @@ import core.string
 import core.string.*
 import static core.string.*
 type Item = { text: String, number: Int }
-impl Item { func copy(self: Self) -> Self { Item { text: self.text.copy(), number: self.number } } }
+impl Item { func copy() -> Self { Item { text: self.text.copy(), number: self.number } } }
 func rename(items: ref[items] List<Item>) -> () [mut items] {
     items[0].text = "after"
     ()
@@ -2992,7 +2992,7 @@ import core.drop
 import core.drop.*
 import static core.drop.*
 type Resource = & Drop & { id: Int }
-impl Resource { func deinit(self: Self) -> () { println(self.id) } }
+impl Resource { func deinit() -> () { println(self.id) } }
 type Item = { resource: Resource }
 func main() -> Int {
     let items = [Item { resource: Resource { id: 1 } }]
@@ -3208,7 +3208,7 @@ import core.drop
 import core.drop.*
 import static core.drop.*
 type Item = & Drop & { id: Int }
-impl Item { func deinit(self: Self) -> () { println(self.id) } }
+impl Item { func deinit() -> () { println(self.id) } }
 enum Input = Match(Int) | Failed(Item)
 enum Output = Done(Int) | Failed(Item)
 func convert(input: Input) -> Output [consume input] {
@@ -3257,7 +3257,7 @@ import core.result
 import core.result.*
 import static core.result.*
 type Item = & Drop & { id: Int }
-impl Item { func deinit(self: Self) -> () { println(self.id) } }
+impl Item { func deinit() -> () { println(self.id) } }
 func fail(item: Item) -> Never [consume item] {
     let local = Item { id: 2 }
     panic("deliberate panic")
@@ -3284,7 +3284,7 @@ import core.drop
 import core.drop.*
 import static core.drop.*
 type Item = & Drop & { id: Int }
-impl Item { func deinit(self: Self) -> () { println(self.id) } }
+impl Item { func deinit() -> () { println(self.id) } }
 func take(item: Item, value: Int) -> Int [consume item] { println(99)
     value }
 func main() -> Int { take(Item { id: 1 }, panic("argument panic")) }
@@ -3322,7 +3322,7 @@ import core.drop.*
 import static core.drop.*
 type Item = { value: Int }
 impl Item {
-    func deinit(self: Self) -> () { println(self.value) }
+    func deinit() -> () { println(self.value) }
 }
 type Pair = { first: Item, second: Item }
 func make() -> Pair { Pair { first: Item { value: 1 }, second: Item { value: 2 } } }
@@ -3345,7 +3345,7 @@ import core.drop
 import core.drop.*
 import static core.drop.*
 type Item = { value: Int }
-impl Item { func deinit(self: Self) -> () { println(self.value) } }
+impl Item { func deinit() -> () { println(self.value) } }
 type Pair = { first: Item, second: Item }
 type Outer = { pair: Pair }
 func main() -> Int {
@@ -3368,7 +3368,7 @@ import core.drop
 import core.drop.*
 import static core.drop.*
 type Item = { value: Int }
-impl Item { func deinit(self: Self) -> () { println(9) } }
+impl Item { func deinit() -> () { println(9) } }
 type Pair = { first: Item, second: Item }
 func main() -> Int {
     let pair = Pair { first: Item { value: 1 }, second: Item { value: 2 } }
@@ -3519,7 +3519,7 @@ fn labelled_scope_exits_cleanup_nested_loops_on_both_backends() {
 import core.drop
 import core.drop.Drop
 type Resource = & Drop & { id: Int }
-impl Resource { func deinit(self: Self) -> () { println(self.id) } }
+impl Resource { func deinit() -> () { println(self.id) } }
 func main() -> Int {
     :request {
         let first = Resource { id: 1 }
@@ -3550,7 +3550,7 @@ fn labelled_scope_exits_preserve_enclosing_expression_temporaries() {
 import core.drop
 import core.drop.Drop
 type Resource = & Drop & { id: Int }
-impl Resource { func deinit(self: Self) -> () { println(self.id) } }
+impl Resource { func deinit() -> () { println(self.id) } }
 func observe(value: Resource, marker: ()) -> Int {
     println(value.id)
     value.id + 41

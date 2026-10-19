@@ -61,7 +61,7 @@ pub type SpawnOptions = {
 
 impl SpawnOptions {
     /// Inherits the directory and captures up to 16 MiB per output stream.
-    pub func defaults() -> SpawnOptions {
+    pub static func defaults() -> SpawnOptions {
         SpawnOptions {
             directory: "", output_limit: 16777216
         }
@@ -74,22 +74,22 @@ impl SpawnOptions {
 pub type Process = & Future<Result<ProcessOutput, ProcessError>> & {
     token: Int, identifier: Int
     /// Returns the OS process identifier. The handle retains its own distinct identity.
-    pub func pid(self: Self) -> Int [read self.identifier]
+    pub func pid() -> Int [read self.identifier]
     /// Checks the direct child's state without waiting for completion.
-    pub func poll(self: Self) -> Result<ProcessStatus, ProcessError> [mut self.token]
+    pub func poll() -> Result<ProcessStatus, ProcessError> [mut self.token]
     /// Requests immediate termination of a running direct child. Await still collects
     /// its exit status and captured output. An already exited child is unchanged.
-    pub func terminate(self: Self) -> Result<(), ProcessError> [mut self.token]
+    pub func terminate() -> Result<(), ProcessError> [mut self.token]
 }
 
 impl Process {
     /// Returns the OS process identifier. The handle retains its own distinct identity.
-    pub func pid(self: Self) -> Int [read self.identifier] {
+    pub func pid() -> Int [read self.identifier] {
         self.identifier
     }
 
     /// Checks the direct child's state without waiting for completion.
-    pub func poll(self: Self) -> Result<ProcessStatus, ProcessError> [mut self.token] {
+    pub func poll() -> Result<ProcessStatus, ProcessError> [mut self.token] {
         self.token = self.token
         let fields = try response(ProcessHost.exchange(1, self.token, "", "", "", 0))
         branch fields[0] {
@@ -100,14 +100,14 @@ impl Process {
 
     /// Requests immediate termination of a running direct child. Await still collects
     /// its exit status and captured output. An already exited child is unchanged.
-    pub func terminate(self: Self) -> Result<(), ProcessError> [mut self.token] {
+    pub func terminate() -> Result<(), ProcessError> [mut self.token] {
         self.token = self.token
         let fields = try response(ProcessHost.exchange(3, self.token, "", "", "", 0))
         Result.Ok(())
     }
 
     /// Consumes the handle, waits for exit and both output streams, and reaps the child.
-    pub func resolve(self: Self) -> Result<ProcessOutput, ProcessError> [consume self, suspend] {
+    pub func resolve() -> Result<ProcessOutput, ProcessError> [consume self, suspend] {
         loop {
             let fields = try response(ProcessHost.wait_step(self.token))
             continue if fields[0] == "R"
@@ -120,7 +120,7 @@ impl Process {
     }
 
     /// Kills and reaps a remaining direct child, including on unwinding.
-    func deinit(self: Self) -> () {
+    func deinit() -> () {
         ProcessHost.release(self.token)
     }
 }
@@ -151,13 +151,13 @@ pub func spawn_with(executable: String, arguments: List<String>, options: SpawnO
 type ProcessHost = {}
 impl ProcessHost {
     /// Reserves a unique identity without acquiring an operating-system resource.
-    func reserve() -> Int = intrinsic("process.reserve")
+    static func reserve() -> Int = intrinsic("process.reserve")
     /// Exchanges private process-control messages with the operating system.
-    func exchange(operation: Int, token: Int, executable: String, arguments: String, directory: String, limit: Int) -> String = intrinsic("process.exchange")
+    static func exchange(operation: Int, token: Int, executable: String, arguments: String, directory: String, limit: Int) -> String = intrinsic("process.exchange")
     /// Releases and reaps a direct child; repeated release is harmless.
-    func release(token: Int) -> () = intrinsic("process.release")
+    static func release(token: Int) -> () = intrinsic("process.release")
     /// Waits briefly for completion, allowing cancellation between calls.
-    func wait_step(token: Int) -> String [read token, suspend] = intrinsic("process.wait")
+    static func wait_step(token: Int) -> String [read token, suspend] = intrinsic("process.wait")
 }
 
 /// Decodes a trusted runtime envelope, preserving operating-system error text.

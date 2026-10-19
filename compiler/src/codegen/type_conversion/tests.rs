@@ -7,12 +7,12 @@ fn fixture() -> Compilation {
     crate::compile(
         r#"
 type Empty = {}
-type Surface = { pub func read(self: Self) -> Int }
-type StoredSurface = { pub value: Int, pub func read(self: Self) -> Int }
-type PrivateSurface = { value: Int, pub func read(self: Self) -> Int }
+type Surface = { pub func read() -> Int }
+type StoredSurface = { pub value: Int, pub func read() -> Int }
+type PrivateSurface = { value: Int, pub func read() -> Int }
 type Ordinary<T> = { pub value: T }
-type Implemented = { pub func read(self: Self) -> Int }
-impl Implemented { func read(self: Implemented) -> Int { 42 } }
+type Implemented = { pub func read() -> Int }
+impl Implemented { func read() -> Int { 42 } }
 type Alias<T> = List<T>
 enum Choice<T> = Some(T) | None
 func main() -> Int { 0 }

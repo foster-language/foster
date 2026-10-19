@@ -6,7 +6,7 @@ type Owner = & Drop & {
     values: Buffer<Int>
 }
 impl Owner {
-    func deinit(self: Self) -> () {
+    func deinit() -> () {
         println("owner dropped")
     }
 }

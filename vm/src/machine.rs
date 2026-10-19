@@ -2196,7 +2196,7 @@ import core.drop.Drop
 import core.result.Result
 import std.fs
 type Held = & Drop & {}
-impl Held { func deinit(self: Self) -> () { fs::write_text("released", "yes")
+impl Held { func deinit() -> () { fs::write_text("released", "yes")
 () } }
 func main() -> Int {
     let held = Held {}

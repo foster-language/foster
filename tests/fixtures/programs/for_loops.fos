@@ -13,7 +13,7 @@ type Bag = {
     values: List<Int>
 }
 impl Bag {
-    func iterator(self: Bag) -> Iterator<Int> {
+    func iterator() -> Iterator<Int> {
         self.values.iterator()
     }
 }

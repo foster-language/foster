@@ -9,8 +9,8 @@
 //!
 //! type CountOnly = { count: Int }
 //! impl CountOnly {
-//!     func length(self: Self) -> Int { self.count }
-//!     func empty?(self: Self) -> Bool { self.count == 0 }
+//!     func length() -> Int { self.count }
+//!     func empty?() -> Bool { self.count == 0 }
 //! }
 //! func size(value: Sized) -> Int { value.length() }
 //! func main() -> Int {
@@ -26,10 +26,10 @@ import std.iter.Iterable
 /// No iteration, element type, or element copying capability is required.
 pub type Sized = {
     /// Returns the nonnegative number of elements without changing the value.
-    pub func length(self: Self) -> Int
+    pub func length() -> Int
 
     /// Returns whether length() is zero without changing the value.
-    pub func empty?(self: Self) -> Bool
+    pub func empty?() -> Bool
 }
 
 /// A sized value supporting independent, repeatable iteration.

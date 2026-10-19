@@ -17,7 +17,7 @@ type Profile = {
 }
 
 type Scored = {
-    pub func score(self: Self) -> Int
+    pub func score() -> Int
 }
 
 enum ScoredChoice = Number(Int)
@@ -37,7 +37,7 @@ func name_size(value: Named) -> Int {
 }
 
 impl ScoredChoice {
-    func score(self: ScoredChoice) -> Int {
+    func score() -> Int {
         branch self {
             ScoredChoice.Number(value) -> value
             ScoredChoice.Empty -> 0

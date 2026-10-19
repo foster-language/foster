@@ -572,8 +572,8 @@ Required callable members can be declared directly in a structural type:
 
 ```foster
 type Identified = {
-    pub func id(self: Self) -> Int [read self]
-    pub func offset(self: Self, amount: Int) -> Int [read self]
+    pub func id() -> Int [read self]
+    pub func offset(amount: Int) -> Int [read self]
 }
 ```
 
@@ -601,7 +601,7 @@ Required functions can introduce their own type parameters, independently of the
 
 ```foster
 type Transform<T> = {
-    pub func map<U>(self: Self, transform: func(T) -> U) -> List<U>
+    pub func map<U>(transform: func(T) -> U) -> List<U>
 }
 ```
 
@@ -662,22 +662,27 @@ branch patterns, not parameter declarations. `let` patterns must be irrefutable:
 field bindings, `_`, or nested record patterns.
 
 Methods and associated functions are declared inside `impl Type { ... }` blocks. The block
-supplies the owning type; member names are unqualified. A first `self` parameter makes a member
-an instance method and must have an explicit type, normally `self: Self`.
-`Self` denotes the implemented value type with its generic arguments, even when the
-receiver is a reference. Borrowed receivers and results use `ref[self] Self`.
-Associated functions can return `Self` without taking a receiver. Lowercase `self`
-is a value and storage-group name, never a type annotation. `Self` is reserved and
-cannot be declared as a type or generic parameter.
-A record member without `self` is an associated function, called through the type:
+supplies the owning type; member names are unqualified. Every ordinary `func` member
+has an implicit first receiver named `self`, with the implemented value type.
+Do not declare `self` in the parameter list. Ordinary receivers borrow by default;
+effects still describe reading, mutation, reshaping, and consumption of `self`.
+`Self` denotes the implemented value type with its generic arguments. Borrowed
+results use `ref[self] T`. Lowercase `self` is a value and storage-group name,
+never a type annotation. `Self` is reserved and cannot be declared as a type or
+generic parameter. An associated function uses `static func`, has no receiver,
+and is called through the type. It can return `Self`.
+A `ref func` member has an implicit `self: ref[self] Self` receiver. This preserves
+explicit reference behavior, including replacement of the caller's whole binding.
+`Self` still denotes the implemented value type. A reference receiver cannot be
+combined with `static`.
 
 ```foster
 pub type Box<T> = { value: T }
 
 impl Box<T> {
-    pub func new(value: T) -> Box<T> { Box { value } }
-    pub func get(self: Self) -> T { self.value }
-    pub func map<U>(self: Self, transform: func(T) -> U) -> Box<U> {
+    pub static func new(value: T) -> Box<T> { Box { value } }
+    pub func get() -> T { self.value }
+    pub func map<U>(transform: func(T) -> U) -> Box<U> {
         Box { value: transform(self.value) }
     }
 }
@@ -686,9 +691,10 @@ func example() -> Int { Box.new(42).get() }
 ```
 
 Block type parameters are available to every member and precede member-specific type parameters.
-A member cannot redeclare a block parameter. A block may also omit type parameters, with generic
-members declaring their own parameters and explicitly annotating `self`, such as
-`impl Box { func get<T>(self: Box<T>) -> T { self.value } }`.
+A member cannot redeclare a block parameter. Specialized targets put explicit generic bindings before the target:
+`impl<T> Box<T> { func get() -> T { self.value } }`.
+This also permits nested and concrete arguments, such as `impl<T> List<List<T>>`
+and `impl<> List<String>`. The target supplies the implicit receiver type.
 
 An implementation parameter may carry structural requirements: `impl Box<T & Copy>`
 makes its members available when `T` has the accessible members required by `Copy`.
@@ -771,7 +777,7 @@ enum Foo = Bar(String)
     | What
     & SomeContract
     & {
-        pub func describe(self: Self) -> String
+        pub func describe() -> String
     }
 ```
 
@@ -779,7 +785,7 @@ The trailing intersection applies to the enum value itself, independent of which
 it. Consequently, every `Foo` value satisfies `SomeContract` and provides `describe`. The defining
 module implements a shared requirement with an
 ordinary instance function whose receiver is the enum type, such as
-`func describe(self: Self) -> String` inside `impl Foo { ... }`. Its body may branch on `self` when cases need
+`func describe() -> String` inside `impl Foo { ... }`. Its body may branch on `self` when cases need
 different behavior. An enum can be structurally adapted to the method-only contracts it satisfies,
 and calls through such a contract dispatch to the original enum value.
 
@@ -946,7 +952,7 @@ shift, and arithmetic operators. Parentheses can make a different grouping expli
 ## Futures and subprocesses
 
 `Future<T>` names the structural contract in `core.future`: a public, consuming
-`resolve(self: Self) -> T [consume self, suspend]` method. Compose it using
+`resolve() -> T [consume self, suspend]` method. Compose it using
 `type Task = & Future<Int> & { ... }`, accept `Future<Int>` as a parameter, or use
 it as a generic constraint. `await task` consumes the receiver and calls its
 `resolve()` implementation. An immediately ready implementation may omit `suspend`.
@@ -965,8 +971,7 @@ failure containment, and typed error outcomes. Compile-time outstanding-request 
 unproven completion at owner destruction with `E0730`; the
 [supported static proofs](remote-semantics.md#supported-static-proofs) describe their conservative limits.
 
-`remote` transfers a record into an isolated virtual thread. An owner-qualified function whose
-first parameter is the semantic `self` receiver is an instance method. Calling that method through a
+`remote` transfers a record into an isolated virtual thread. An ordinary function in an `impl` block is an instance method with an implicit `self` receiver. Calling that method through a
 `Remote<T>` handle sends a FIFO mailbox message and returns `RemoteFuture<Result<R, RemoteError>>`, satisfying `Future<Result<R, RemoteError>>`; `await` parks the current
 virtual thread until the reply arrives. `Result.Ok` contains the method result, while
 `Result.Error(RemoteError.Failed(message))` describes an execution failure. Import `core.result`
@@ -974,7 +979,7 @@ and `core.remote_error` to name these variants. Domain Result errors remain insi
 
 ```foster
 impl Counter {
-    func increment(self: Self, amount: Int) -> Int {
+    func increment(amount: Int) -> Int {
         self.value = self.value + amount
         self.value
     }
@@ -1198,16 +1203,16 @@ overload, the rightmost compatible implementation wins. A method supplied by the
 type's own `impl` block has final precedence:
 
 ```foster
-pub type Bar = { pub func fighter(self: Self) -> Int }
-pub type Monkey = { pub func fighter(self: Self) -> Int }
-impl Bar { pub func fighter(self: Self) -> Int { 1 } }
-impl Monkey { pub func fighter(self: Self) -> Int { 2 } }
+pub type Bar = { pub func fighter() -> Int }
+pub type Monkey = { pub func fighter() -> Int }
+impl Bar { pub func fighter() -> Int { 1 } }
+impl Monkey { pub func fighter() -> Int { 2 } }
 type Foo = & Bar & Monkey & {}
 
 func main() -> Int { Foo {}.fighter() } // 2
 ```
 
-An additional declaration such as `pub func fighter(self: Self) -> Int` adds a requirement without
+An additional declaration such as `pub func fighter() -> Int` adds a requirement without
 replacing an existing body. Distinct overloads remain available; precedence selects between
 implementations with the same parameter signature. Overlapping fields must retain compatible
 types, and overlapping implementations must preserve return types, ownership modes, visibility,
@@ -1237,11 +1242,11 @@ import core.option
 
 
 pub type Iterator<T> = {
-    pub func next(self: Self) -> Option<T> [mut self]
+    pub func next() -> Option<T> [mut self]
 }
 
 pub type Iterable<T> = {
-    pub func iterator(self: Self) -> Iterator<T>
+    pub func iterator() -> Iterator<T>
 }
 ```
 
@@ -1325,7 +1330,7 @@ concrete identifier kind instead of erasing it:
 
 ```foster
 pub type ResourceIdentifier = {
-    pub func resource_id(self: Self) -> String [read self]
+    pub func resource_id() -> String [read self]
 }
 
 pub type Resource<L> = {
@@ -1353,12 +1358,12 @@ Stateful, positioned stream behavior remains expressed with generic structural c
 
 ```foster
 pub type Reader<E> = {
-    pub func read(self: Self, maximum: Int) -> Result<Bytes, E> [mut self]
+    pub func read(maximum: Int) -> Result<Bytes, E> [mut self]
 }
 
 pub type Writer<E> = {
-    pub func write(self: Self, contents: Bytes) -> Result<Int, E> [mut self]
-    pub func flush(self: Self) -> Result<(), E> [mut self]
+    pub func write(contents: Bytes) -> Result<Int, E> [mut self]
+    pub func flush() -> Result<(), E> [mut self]
 }
 ```
 
@@ -1378,15 +1383,15 @@ borrow behavior.
 
 ```foster
 pub type Equality<T> = {
-    pub func equal?(self: Self, other: T) -> Bool
+    pub func equal?(other: T) -> Bool
 }
 
 pub type Ordered<T> = & Equality<T> & {
-    pub func compare(self: Self, other: T) -> Ordering
+    pub func compare(other: T) -> Ordering
 }
 
 pub type Hashing = {
-    pub func hash(self: Self) -> Int
+    pub func hash() -> Int
 }
 ```
 
@@ -1465,8 +1470,8 @@ enqueue(move pending_job)
 ```
 
 Explicit user-defined copying is available through `core.copy.Copy`, whose method is
-`func copy(self: Self) -> Self`. The return type `Self` means the concrete receiver type. The separate
-`core.drop.Drop` contract declares `func deinit(self: Self) -> ()`, called automatically at ownership
+`func copy() -> Self`. The return type `Self` means the concrete receiver type. The separate
+`core.drop.Drop` contract declares `func deinit() -> ()`, called automatically at ownership
 end before child values are released. Copies create independent owners; moves transfer ownership
 and its cleanup obligation. Neither protocol changes implicit scalar copy classification.
 
@@ -1514,7 +1519,7 @@ and VM lowering retain the contract without source-level suffixes:
 
 ```foster
 impl Inventory {
-    func restock(self: Self, amount: Int) -> Int {
+    func restock(amount: Int) -> Int {
         self.count = self.count + amount
         self.count
     }

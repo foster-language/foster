@@ -11,7 +11,7 @@ type Source = & RandomSource & {
 }
 
 impl Source {
-    func next(self: Self) -> Result<Int, RandomError> [mut self.value, read self.limit] {
+    func next() -> Result<Int, RandomError> [mut self.value, read self.limit] {
         let value = self.value
         self.value = branch {
             value >= self.limit -> 0 _ -> value + 1
@@ -19,7 +19,7 @@ impl Source {
         Result.Ok(value)
     }
 
-    func maximum(self: Self) -> Int {
+    func maximum() -> Int {
         self.limit
     }
 }

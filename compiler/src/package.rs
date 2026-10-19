@@ -1256,11 +1256,17 @@ impl Package {
                         module.name
                     )));
                 };
-                if !implementation.parameters.is_empty() && implementation.parameters.len() != arity
-                {
+                let declared_arity = match &implementation.target {
+                    Some(crate::ast::TypeExpr::Named(_, arguments)) => Some(arguments.len()),
+                    _ if !implementation.parameters.is_empty() => {
+                        Some(implementation.parameters.len())
+                    }
+                    _ => None,
+                };
+                if declared_arity.is_some_and(|count| count != arity) {
                     return Err(FosterError::runtime(format!(
                         "impl `{owner}` expects {arity} type parameters, received {}",
-                        implementation.parameters.len()
+                        declared_arity.unwrap()
                     )));
                 }
             }

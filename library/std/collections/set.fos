@@ -9,7 +9,7 @@
 //! import std.collections.set.Membership
 //! type Answers = {}
 //! impl Answers {
-//!     func contains?(self: Self, value: Int) -> Bool { value == 42 }
+//!     func contains?(value: Int) -> Bool { value == 42 }
 //! }
 //! func accepts(provider: Membership<Int>) -> Bool { provider.contains?(42) }
 //! func main() -> Int {
@@ -25,25 +25,25 @@ import std.iter.Iterator
 /// Value membership without requiring sizing, traversal, or collection updates.
 pub type Membership<T> = {
     /// Tests membership without consuming the set.
-    pub func contains?(self: Self, value: T) -> Bool [read self, read value]
+    pub func contains?(value: T) -> Bool [read self, read value]
 }
 
 /// A collection of unique values with implementation-defined iteration order.
 /// Membership borrows the set; updates consume and preserve the concrete implementation.
 pub type Set<T> = & Collection<T> & Membership<T> & {
     /// Returns this implementation containing `value`.
-    pub func insert(self: Self, value: T) -> Self [mut self, consume self, consume value]
+    pub func insert(value: T) -> Self [mut self, consume self, consume value]
     /// Returns this implementation without `value`.
-    pub func remove(self: Self, value: T) -> Self [mut self, consume self]
+    pub func remove(value: T) -> Self [mut self, consume self]
 }
 
 impl Set {
     /// Creates an insertion-ordered list-backed set; use HashSet.empty for hashed storage.
-    pub func empty<T>() -> ListSet<T> {
+    pub static func empty<T>() -> ListSet<T> {
         ListSet.empty()
     }
     /// Creates an insertion-ordered list-backed set containing each input value once.
-    pub func from<T>(values: List<T>) -> ListSet<T> [consume values] {
+    pub static func from<T>(values: List<T>) -> ListSet<T> [consume values] {
         ListSet.from(move values)
     }
 }
@@ -58,41 +58,41 @@ pub type ListSet<T> = & Set<T> & {
 
 impl ListSet<T> {
     /// Creates an empty set.
-    pub func empty() -> ListSet<T> {
+    pub static func empty() -> ListSet<T> {
         ListSet {
             values: []
         }
     }
 
     /// Creates a set containing each input value once.
-    pub func from(values: List<T>) -> ListSet<T> [consume values] {
+    pub static func from(values: List<T>) -> ListSet<T> [consume values] {
         ListSet {
             values: unique(move values, [])
         }
     }
 
     /// Returns the number of values in the set.
-    pub func length(self: Self) -> Int {
+    pub func length() -> Int {
         self.values.length
     }
 
     /// Returns whether the set contains no values.
-    pub func empty?(self: Self) -> Bool {
+    pub func empty?() -> Bool {
         self.values.empty?
     }
 
     /// Creates an independent iterator in insertion order.
-    pub func iterator(self: Self) -> Iterator<T> {
+    pub func iterator() -> Iterator<T> {
         self.values.iterator()
     }
 
     /// Returns whether `value` is present.
-    pub func contains?(self: Self, value: T) -> Bool {
+    pub func contains?(value: T) -> Bool {
         contains_value?(self.values, value)
     }
 
     /// Returns a set containing `value`.
-    pub func insert(self: Self, value: T) -> ListSet<T> [consume self, consume value] {
+    pub func insert(value: T) -> ListSet<T> [consume self, consume value] {
         branch {
             self.contains?(value) -> self
             _ -> ListSet {
@@ -102,7 +102,7 @@ impl ListSet<T> {
     }
 
     /// Returns a set without `value`.
-    pub func remove(self: Self, value: T) -> ListSet<T> [consume self] {
+    pub func remove(value: T) -> ListSet<T> [consume self] {
         ListSet {
             values: without(move self.values, value, [])
         }

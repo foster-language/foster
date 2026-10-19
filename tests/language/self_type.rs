@@ -19,16 +19,16 @@ fn self_is_reserved_and_obsolete_receiver_syntax_is_rejected() {
     for source in [
         "type Item = {}\nimpl Item { func get(self) -> Int { 42 } }",
         "type Item = { pub func get(self) -> Int }",
-        "type Item = {}\nimpl Item { func get(self: Self) -> self { move self } }",
+        "type Item = {}\nimpl Item { func get() -> self { move self } }",
         "func get(value: Self) -> Int { 42 }",
         "func get() -> Self { 42 }",
         "type Self = {}",
         "type Item<Self> = {}",
         "func get<Self>(value: Self) -> Self { value }",
         "type Item = {}\nimpl Item<Self> {}",
-        "type Item = {}\nimpl Item { func get(self: Self<Int>) -> Int { 42 } }",
-        "type Item = {}\nimpl Item { func get(self: ref[self] Self) -> Self { self } }",
-        "type Item = { pub func combine(self: Self, other: Self) -> Self }",
+        "type Item = {}\nimpl Item { func get(self: Self) -> Int { 42 } }",
+        "type Item = {}\nimpl Item { ref func get() -> Self { self } }",
+        "type Item = { pub func combine(other: Self) -> Self }",
     ] {
         assert!(foster::compile(source).is_err(), "accepted {source}");
     }
@@ -36,9 +36,10 @@ fn self_is_reserved_and_obsolete_receiver_syntax_is_rejected() {
 
 #[test]
 fn formatter_preserves_self_type_spelling() {
-    let source = "type Item = {}\nimpl Item {\nfunc identity(self: Self) -> Self [consume self] { move self }\n}\n";
+    let source =
+        "type Item = {}\nimpl Item {\nfunc identity() -> Self [consume self] { move self }\n}\n";
     let formatted = foster::formatter::format(source).unwrap();
-    assert!(formatted.contains("identity(self: Self) -> Self"));
+    assert!(formatted.contains("identity() -> Self"));
     assert_eq!(formatted, foster::formatter::format(&formatted).unwrap());
 }
 
@@ -48,7 +49,7 @@ fn implementation_parameters_can_use_the_concrete_self_type() {
 type Other = {}
 type Item = { pub value: Int }
 impl Item {
-    func add(self: Self, other: Self) -> Self { Item { value: self.value + other.value } }
+    func add(other: Self) -> Self { Item { value: self.value + other.value } }
 }
 func main() -> Int { Item { value: 20 }.add(Item { value: 22 }).value }
 "#;

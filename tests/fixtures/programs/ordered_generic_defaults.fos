@@ -1,22 +1,31 @@
 pub type Provider<T> = {}
-impl Provider {
-    pub func echo<T>(self: Provider<T>, value: T) -> T [consume value] {
+impl<T> Provider<T> {
+    pub func echo(value: T) -> T [consume value] {
         value
     }
-    pub func score<T>(self: Provider<T>, value: Int) -> Int {
+}
+
+impl<T> Provider<T> {
+    pub func score(value: Int) -> Int {
         value + 1
     }
-    pub func score<T>(self: Provider<T>, value: String) -> Int {
+}
+
+impl<T> Provider<T> {
+    pub func score(value: String) -> Int {
         9
     }
-    pub func closure<T>(self: Provider<T>) -> func(Int) -> Int {
+}
+
+impl<T> Provider<T> {
+    pub func closure() -> func(Int) -> Int {
         (value: Int) -> value + 1
     }
 }
 pub type Middle<U> = & Provider<U> & {}
 pub type Other = {}
 impl Other {
-    pub func score(self: Self, value: Int) -> Int {
+    pub func score(value: Int) -> Int {
         value + 2
     }
 }

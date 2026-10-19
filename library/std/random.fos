@@ -27,21 +27,21 @@ pub type RandomError = {
 /// generators share one contract without hiding environmental errors.
 pub type RandomSource = {
     /// Returns the next uniformly distributed source value.
-    pub func next(self: Self) -> Result<Int, RandomError> [mut self]
+    pub func next() -> Result<Int, RandomError> [mut self]
     /// Returns the inclusive maximum value produced by `next`.
-    pub func maximum(self: Self) -> Int
+    pub func maximum() -> Int
 }
 
 /// A random source whose deterministic state can be reset from an integer seed.
 pub type SeedableRandom = & RandomSource & {
     /// Resets this source to the sequence selected by `seed`.
-    pub func reseed(self: Self, seed: Int) -> () [mut self]
+    pub func reseed(seed: Int) -> () [mut self]
 }
 
 /// A random source which can derive another deterministic stream.
 pub type SplittableRandom = & RandomSource & {
     /// Advances this source and returns a separately owned derived stream.
-    pub func split(self: Self) -> RandomSource [mut self]
+    pub func split() -> RandomSource [mut self]
 }
 
 /// Private namespace for operating-system entropy.
@@ -49,7 +49,7 @@ type RandomHost = {}
 
 impl RandomHost {
     /// Reads bytes from the operating system's secure entropy source.
-    func bytes(count: Int) -> Result<Bytes, RandomError> = intrinsic("random.bytes")
+    static func bytes(count: Int) -> Result<Bytes, RandomError> = intrinsic("random.bytes")
 }
 
 /// A stateless view of the operating system's secure random source.
@@ -60,7 +60,7 @@ pub type SystemRandom = & RandomSource & secure::EntropySource & {
 
 impl SystemRandom {
     /// Constructs an operating-system-backed random source.
-    pub func new() -> SystemRandom {
+    pub static func new() -> SystemRandom {
         SystemRandom {
             marker: :system_random
         }
@@ -68,21 +68,21 @@ impl SystemRandom {
 
     /// Returns exactly `count` bytes of operating-system entropy.
     /// Accepts `0..1048576`, inclusive; invalid sizes or unavailable entropy return `RandomError`.
-    pub func bytes(self: Self, count: Int) -> Result<Bytes, RandomError> {
+    pub func bytes(count: Int) -> Result<Bytes, RandomError> {
         return failure("bytes", count, "random byte count must not be negative") if count < 0
         return failure("bytes", count, "random byte count must not exceed 1048576") if count > 1048576
         RandomHost.bytes(count)
     }
 
     /// Returns a uniformly distributed 31-bit nonnegative integer from operating-system entropy.
-    pub func next(self: Self) -> Result<Int, RandomError> {
+    pub func next() -> Result<Int, RandomError> {
         let entropy = try self.bytes(4)
         let first = entropy[0].int.modulo(128)
         Result.Ok(((first * 256 + entropy[1].int) * 256 + entropy[2].int) * 256 + entropy[3].int)
     }
 
     /// Returns the largest value produced by `SystemRandom.next`.
-    pub func maximum(self: Self) -> Int {
+    pub func maximum() -> Int {
         2147483647
     }
 }
@@ -166,7 +166,7 @@ type RandomTestSource = & RandomSource & {
 
 impl RandomTestSource {
     /// Returns the current test value and advances cyclically.
-    func next(self: Self) -> Result<Int, RandomError> [mut self.value, read self.maximum_value] {
+    func next() -> Result<Int, RandomError> [mut self.value, read self.maximum_value] {
         let value = self.value
         self.value = branch {
             value >= self.maximum_value -> 0 _ -> value + 1
@@ -175,7 +175,7 @@ impl RandomTestSource {
     }
 
     /// Returns the configured test-source maximum.
-    func maximum(self: Self) -> Int {
+    func maximum() -> Int {
         self.maximum_value
     }
 }

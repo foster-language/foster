@@ -33,11 +33,11 @@ pub enum Weekday = Monday
 /// Calendar operations required by civil date construction and arithmetic.
 pub type Calendar = {
     /// Returns the stable calendar identifier.
-    pub func id(self: Self) -> String
+    pub func id() -> String
     /// Returns whether `year` contains a leap day.
-    pub func leap_year?(self: Self, year: Int) -> Bool
+    pub func leap_year?(year: Int) -> Bool
     /// Returns the number of days in one validated month.
-    pub func days_in_month(self: Self, year: Int, month: Int) -> Int
+    pub func days_in_month(year: Int, month: Int) -> Int
 }
 
 /// The proleptic ISO-8601 Gregorian calendar.
@@ -47,24 +47,24 @@ pub type IsoCalendar = & Calendar & {
 
 impl IsoCalendar {
     /// Constructs the ISO calendar capability.
-    pub func new() -> IsoCalendar {
+    pub static func new() -> IsoCalendar {
         IsoCalendar {
             marker: :iso8601
         }
     }
 
     /// Returns the ISO calendar identifier.
-    pub func id(self: Self) -> String {
+    pub func id() -> String {
         "iso8601"
     }
 
     /// Returns whether an ISO year contains February 29.
-    pub func leap_year?(self: Self, year: Int) -> Bool {
+    pub func leap_year?(year: Int) -> Bool {
         leap_year?(year)
     }
 
     /// Returns the number of days in an ISO month, or zero for an invalid month.
-    pub func days_in_month(self: Self, year: Int, month: Int) -> Int {
+    pub func days_in_month(year: Int, month: Int) -> Int {
         days_in_month(year, month)
     }
 }
@@ -83,25 +83,25 @@ pub type Span = {
 
     // Required public operations; implementations live in impl blocks.
     /// Returns the year component.
-    pub func years(self: Self) -> Int [read self.years_value]
+    pub func years() -> Int [read self.years_value]
     /// Returns the month component.
-    pub func months(self: Self) -> Int [read self.months_value]
+    pub func months() -> Int [read self.months_value]
     /// Returns the week component.
-    pub func weeks(self: Self) -> Int [read self.weeks_value]
+    pub func weeks() -> Int [read self.weeks_value]
     /// Returns the day component.
-    pub func days(self: Self) -> Int [read self.days_value]
+    pub func days() -> Int [read self.days_value]
     /// Returns the hour component.
-    pub func hours(self: Self) -> Int [read self.hours_value]
+    pub func hours() -> Int [read self.hours_value]
     /// Returns the minute component.
-    pub func minutes(self: Self) -> Int [read self.minutes_value]
+    pub func minutes() -> Int [read self.minutes_value]
     /// Returns the second component.
-    pub func seconds(self: Self) -> Int [read self.seconds_value]
+    pub func seconds() -> Int [read self.seconds_value]
     /// Returns the nanosecond component.
-    pub func nanoseconds(self: Self) -> Int [read self.nanoseconds_value]
+    pub func nanoseconds() -> Int [read self.nanoseconds_value]
     /// Adds two calendar-aware spans component by component.
-    pub func add(self: Self, other: Span) -> Span [read other(days_value, hours_value, minutes_value, months_value, nanoseconds_value, seconds_value, weeks_value, years_value), read self(days_value, hours_value, minutes_value, months_value, nanoseconds_value, seconds_value, weeks_value, years_value)]
+    pub func add(other: Span) -> Span [read other(days_value, hours_value, minutes_value, months_value, nanoseconds_value, seconds_value, weeks_value, years_value), read self(days_value, hours_value, minutes_value, months_value, nanoseconds_value, seconds_value, weeks_value, years_value)]
     /// Returns the component-wise inverse of this span.
-    pub func negated(self: Self) -> Span [read self(days_value, hours_value, minutes_value, months_value, nanoseconds_value, seconds_value, weeks_value, years_value)]
+    pub func negated() -> Span [read self(days_value, hours_value, minutes_value, months_value, nanoseconds_value, seconds_value, weeks_value, years_value)]
 }
 
 /// Noda-style spelling for a calendar-aware span.
@@ -109,67 +109,67 @@ pub type Period = Span
 
 impl Span {
     /// Constructs a calendar-aware span.
-    pub func from(years: Int, months: Int, weeks: Int, days: Int, hours: Int, minutes: Int, seconds: Int, nanoseconds: Int) -> Span {
+    pub static func from(years: Int, months: Int, weeks: Int, days: Int, hours: Int, minutes: Int, seconds: Int, nanoseconds: Int) -> Span {
         Span {
             years_value: years, months_value: months, weeks_value: weeks, days_value: days, hours_value: hours, minutes_value: minutes, seconds_value: seconds, nanoseconds_value: nanoseconds
         }
     }
 
     /// Returns a zero calendar span.
-    pub func zero() -> Span {
+    pub static func zero() -> Span {
         Span.from(0, 0, 0, 0, 0, 0, 0, 0)
     }
 
     /// Constructs a whole-day span.
-    pub func from_days(days: Int) -> Span {
+    pub static func from_days(days: Int) -> Span {
         Span.from(0, 0, 0, days, 0, 0, 0, 0)
     }
 
     /// Constructs a whole-month span.
-    pub func from_months(months: Int) -> Span {
+    pub static func from_months(months: Int) -> Span {
         Span.from(0, months, 0, 0, 0, 0, 0, 0)
     }
 
     /// Returns the year component.
-    pub func years(self: Self) -> Int {
+    pub func years() -> Int {
         self.years_value
     }
     /// Returns the month component.
-    pub func months(self: Self) -> Int {
+    pub func months() -> Int {
         self.months_value
     }
     /// Returns the week component.
-    pub func weeks(self: Self) -> Int {
+    pub func weeks() -> Int {
         self.weeks_value
     }
     /// Returns the day component.
-    pub func days(self: Self) -> Int {
+    pub func days() -> Int {
         self.days_value
     }
     /// Returns the hour component.
-    pub func hours(self: Self) -> Int {
+    pub func hours() -> Int {
         self.hours_value
     }
     /// Returns the minute component.
-    pub func minutes(self: Self) -> Int {
+    pub func minutes() -> Int {
         self.minutes_value
     }
     /// Returns the second component.
-    pub func seconds(self: Self) -> Int {
+    pub func seconds() -> Int {
         self.seconds_value
     }
     /// Returns the nanosecond component.
-    pub func nanoseconds(self: Self) -> Int {
+    pub func nanoseconds() -> Int {
         self.nanoseconds_value
     }
 
     /// Adds two calendar-aware spans component by component.
-    pub func add(self: Self, other: Span) -> Span {
+    pub func add(other: Span) -> Span {
         Span.from(self.years_value + other.years_value, self.months_value + other.months_value, self.weeks_value + other.weeks_value, self.days_value + other.days_value, self.hours_value + other.hours_value, self.minutes_value + other.minutes_value, self.seconds_value + other.seconds_value, self.nanoseconds_value + other.nanoseconds_value)
     }
 
     /// Returns the component-wise inverse of this span.
-    pub func negated(self: Self) -> Span {
+    pub func negated() -> Span {
         Span.from(-self.years_value, -self.months_value, -self.weeks_value, -self.days_value, -self.hours_value, -self.minutes_value, -self.seconds_value, -self.nanoseconds_value)
     }
 }
@@ -182,30 +182,30 @@ pub type Date = & Ordered<Date> & {
 
     // Required public operations; implementations live in impl blocks.
     /// Returns the ISO year.
-    pub func year(self: Self) -> Int [read self.year_value]
+    pub func year() -> Int [read self.year_value]
     /// Returns the ISO month from 1 through 12.
-    pub func month(self: Self) -> Int [read self.month_value]
+    pub func month() -> Int [read self.month_value]
     /// Returns the one-based day of the month.
-    pub func day(self: Self) -> Int [read self.day_value]
+    pub func day() -> Int [read self.day_value]
     /// Returns the signed day count from 1970-01-01.
-    pub func epoch_day(self: Self) -> Int [read self(day_value, month_value, year_value)]
+    pub func epoch_day() -> Int [read self(day_value, month_value, year_value)]
     /// Returns the ISO weekday.
-    pub func weekday(self: Self) -> Weekday [read self(day_value, month_value, year_value)]
+    pub func weekday() -> Weekday [read self(day_value, month_value, year_value)]
     /// Returns the one-based day within the year.
-    pub func day_of_year(self: Self) -> Int [read self(day_value, month_value, year_value)]
+    pub func day_of_year() -> Int [read self(day_value, month_value, year_value)]
     /// Adds a signed number of civil days.
-    pub func add_days(self: Self, days: Int) -> Date [read days, read self(day_value, month_value, year_value)]
+    pub func add_days(days: Int) -> Date [read days, read self(day_value, month_value, year_value)]
     /// Adds a calendar-aware span using explicit overflow behavior.
     ///
     /// Time components are rejected because a date has no clock time.
-    pub func add(self: Self, span: Span, overflow: Overflow) -> Result<Date, CivilError> [read overflow, read self, read span]
+    pub func add(span: Span, overflow: Overflow) -> Result<Date, CivilError> [read overflow, read self, read span]
     /// Combines this date with a civil clock time.
-    pub func at(self: Self, time: TimeOfDay) -> DateTime [consume self, consume time]
+    pub func at(time: TimeOfDay) -> DateTime [consume self, consume time]
 }
 
 impl Date {
     /// Validates and constructs an ISO civil date.
-    pub func from(year: Int, month: Int, day: Int) -> Result<Date, CivilError> {
+    pub static func from(year: Int, month: Int, day: Int) -> Result<Date, CivilError> {
         branch {
             month < 1 -> invalid_date("month", month, "month must be between 1 and 12")
             month > 12 -> invalid_date("month", month, "month must be between 1 and 12")
@@ -218,47 +218,47 @@ impl Date {
     }
 
     /// Constructs the date corresponding to a signed day count from 1970-01-01.
-    pub func from_epoch_day(epoch_day: Int) -> Date {
+    pub static func from_epoch_day(epoch_day: Int) -> Date {
         civil_from_days(epoch_day)
     }
 
     /// Returns the ISO year.
-    pub func year(self: Self) -> Int {
+    pub func year() -> Int {
         self.year_value
     }
     /// Returns the ISO month from 1 through 12.
-    pub func month(self: Self) -> Int {
+    pub func month() -> Int {
         self.month_value
     }
     /// Returns the one-based day of the month.
-    pub func day(self: Self) -> Int {
+    pub func day() -> Int {
         self.day_value
     }
 
     /// Returns the signed day count from 1970-01-01.
-    pub func epoch_day(self: Self) -> Int {
+    pub func epoch_day() -> Int {
         days_from_civil(self.year_value, self.month_value, self.day_value)
     }
 
     /// Returns the ISO weekday.
-    pub func weekday(self: Self) -> Weekday {
+    pub func weekday() -> Weekday {
         weekday_from_number(floor_mod(self.epoch_day() + 3, 7) + 1)
     }
 
     /// Returns the one-based day within the year.
-    pub func day_of_year(self: Self) -> Int {
+    pub func day_of_year() -> Int {
         self.epoch_day() - days_from_civil(self.year_value, 1, 1) + 1
     }
 
     /// Adds a signed number of civil days.
-    pub func add_days(self: Self, days: Int) -> Date {
+    pub func add_days(days: Int) -> Date {
         Date.from_epoch_day(self.epoch_day() + days)
     }
 
     /// Adds a calendar-aware span using explicit overflow behavior.
     ///
     /// Time components are rejected because a date has no clock time.
-    pub func add(self: Self, span: Span, overflow: Overflow) -> Result<Date, CivilError> {
+    pub func add(span: Span, overflow: Overflow) -> Result<Date, CivilError> {
         branch {
             span.hours() != 0 || span.minutes() != 0 || span.seconds() != 0 || span.nanoseconds() != 0 -> invalid_date("span", 0, "time units cannot be added to a date")
             _ -> add_date_parts(self, span, overflow)
@@ -266,17 +266,17 @@ impl Date {
     }
 
     /// Compares two civil dates.
-    pub func compare(self: Self, other: Date) -> Ordering {
+    pub func compare(other: Date) -> Ordering {
         compare_int(self.epoch_day(), other.epoch_day())
     }
 
     /// Returns whether two civil dates are equal.
-    pub func equal?(self: Self, other: Date) -> Bool {
+    pub func equal?(other: Date) -> Bool {
         self.year_value == other.year_value && self.month_value == other.month_value && self.day_value == other.day_value
     }
 
     /// Combines this date with a civil clock time.
-    pub func at(self: Self, time: TimeOfDay) -> DateTime [consume self, consume time] {
+    pub func at(time: TimeOfDay) -> DateTime [consume self, consume time] {
         DateTime {
             date_value: self, time_value: time
         }
@@ -292,20 +292,20 @@ pub type TimeOfDay = & Ordered<TimeOfDay> & {
 
     // Required public operations; implementations live in impl blocks.
     /// Returns the hour from 0 through 23.
-    pub func hour(self: Self) -> Int [read self.hour_value]
+    pub func hour() -> Int [read self.hour_value]
     /// Returns the minute from 0 through 59.
-    pub func minute(self: Self) -> Int [read self.minute_value]
+    pub func minute() -> Int [read self.minute_value]
     /// Returns the second from 0 through 59.
-    pub func second(self: Self) -> Int [read self.second_value]
+    pub func second() -> Int [read self.second_value]
     /// Returns the fractional nanosecond component.
-    pub func nanosecond(self: Self) -> Int [read self.nanosecond_value]
+    pub func nanosecond() -> Int [read self.nanosecond_value]
     /// Returns nanoseconds elapsed since local midnight.
-    pub func nanosecond_of_day(self: Self) -> Int [read self(hour_value, minute_value, nanosecond_value, second_value)]
+    pub func nanosecond_of_day() -> Int [read self(hour_value, minute_value, nanosecond_value, second_value)]
 }
 
 impl TimeOfDay {
     /// Validates and constructs a civil clock time.
-    pub func from(hour: Int, minute: Int, second: Int, nanosecond: Int) -> Result<TimeOfDay, CivilError> {
+    pub static func from(hour: Int, minute: Int, second: Int, nanosecond: Int) -> Result<TimeOfDay, CivilError> {
         branch {
             hour < 0 || hour > 23 -> invalid_time("hour", hour, "hour must be between 0 and 23")
             minute < 0 || minute > 59 -> invalid_time("minute", minute, "minute must be between 0 and 59")
@@ -318,36 +318,36 @@ impl TimeOfDay {
     }
 
     /// Returns midnight.
-    pub func midnight() -> TimeOfDay {
+    pub static func midnight() -> TimeOfDay {
         TimeOfDay {
             hour_value: 0, minute_value: 0, second_value: 0, nanosecond_value: 0
         }
     }
 
     /// Returns the hour from 0 through 23.
-    pub func hour(self: Self) -> Int {
+    pub func hour() -> Int {
         self.hour_value
     }
     /// Returns the minute from 0 through 59.
-    pub func minute(self: Self) -> Int {
+    pub func minute() -> Int {
         self.minute_value
     }
     /// Returns the second from 0 through 59.
-    pub func second(self: Self) -> Int {
+    pub func second() -> Int {
         self.second_value
     }
     /// Returns the fractional nanosecond component.
-    pub func nanosecond(self: Self) -> Int {
+    pub func nanosecond() -> Int {
         self.nanosecond_value
     }
 
     /// Returns nanoseconds elapsed since local midnight.
-    pub func nanosecond_of_day(self: Self) -> Int {
+    pub func nanosecond_of_day() -> Int {
         ((self.hour_value * 60 + self.minute_value) * 60 + self.second_value) * 1000000000 + self.nanosecond_value
     }
 
     /// Constructs a time from a validated nanosecond count within one day.
-    pub func from_nanosecond_of_day(value: Int) -> TimeOfDay {
+    pub static func from_nanosecond_of_day(value: Int) -> TimeOfDay {
         let seconds = value / 1000000000
         let nanosecond = value - seconds * 1000000000
         let hour = seconds / 3600
@@ -359,12 +359,12 @@ impl TimeOfDay {
     }
 
     /// Compares two civil clock times.
-    pub func compare(self: Self, other: TimeOfDay) -> Ordering {
+    pub func compare(other: TimeOfDay) -> Ordering {
         compare_int(self.nanosecond_of_day(), other.nanosecond_of_day())
     }
 
     /// Returns whether two civil clock times are equal.
-    pub func equal?(self: Self, other: TimeOfDay) -> Bool {
+    pub func equal?(other: TimeOfDay) -> Bool {
         self.nanosecond_of_day() == other.nanosecond_of_day()
     }
 }
@@ -376,27 +376,27 @@ pub type DateTime = & Ordered<DateTime> & {
 
     // Required public operations; implementations live in impl blocks.
     /// Returns the civil date.
-    pub func date(self: Self) -> Date [read self(date_value.day_value, date_value.month_value, date_value.year_value)]
+    pub func date() -> Date [read self(date_value.day_value, date_value.month_value, date_value.year_value)]
     /// Returns the civil clock time.
-    pub func time(self: Self) -> TimeOfDay [read self(time_value.hour_value, time_value.minute_value, time_value.nanosecond_value, time_value.second_value)]
+    pub func time() -> TimeOfDay [read self(time_value.hour_value, time_value.minute_value, time_value.nanosecond_value, time_value.second_value)]
     /// Returns Unix seconds when this civil value is interpreted as UTC.
-    pub func epoch_seconds(self: Self) -> Int [read self(date_value.day_value, date_value.month_value, date_value.year_value, time_value.hour_value, time_value.minute_value, time_value.nanosecond_value, time_value.second_value)]
+    pub func epoch_seconds() -> Int [read self(date_value.day_value, date_value.month_value, date_value.year_value, time_value.hour_value, time_value.minute_value, time_value.nanosecond_value, time_value.second_value)]
     /// Returns the fractional nanosecond component.
-    pub func nanosecond(self: Self) -> Int [read self.time_value.nanosecond_value]
+    pub func nanosecond() -> Int [read self.time_value.nanosecond_value]
     /// Adds a calendar-aware span with date overflow handled explicitly.
-    pub func add(self: Self, span: Span, overflow: Overflow) -> Result<DateTime, CivilError> [read overflow, read self(date_value, time_value.hour_value, time_value.minute_value, time_value.nanosecond_value, time_value.second_value), read span(days_value, hours_value, minutes_value, months_value, nanoseconds_value, seconds_value, weeks_value, years_value)]
+    pub func add(span: Span, overflow: Overflow) -> Result<DateTime, CivilError> [read overflow, read self(date_value, time_value.hour_value, time_value.minute_value, time_value.nanosecond_value, time_value.second_value), read span(days_value, hours_value, minutes_value, months_value, nanoseconds_value, seconds_value, weeks_value, years_value)]
 }
 
 impl DateTime {
     /// Combines a civil date and time.
-    pub func from(date: Date, time: TimeOfDay) -> DateTime {
+    pub static func from(date: Date, time: TimeOfDay) -> DateTime {
         DateTime {
             date_value: date, time_value: time
         }
     }
 
     /// Constructs a civil date-time from Unix parts interpreted in UTC.
-    pub func from_epoch_parts(epoch_seconds: Int, nanosecond: Int) -> DateTime {
+    pub static func from_epoch_parts(epoch_seconds: Int, nanosecond: Int) -> DateTime {
         let day = floor_div(epoch_seconds, 86400)
         let second_of_day = epoch_seconds - day * 86400
         DateTime {
@@ -406,26 +406,26 @@ impl DateTime {
     }
 
     /// Returns the civil date.
-    pub func date(self: Self) -> Date {
+    pub func date() -> Date {
         Date.from_epoch_day(self.date_value.epoch_day())
     }
     /// Returns the civil clock time.
-    pub func time(self: Self) -> TimeOfDay {
+    pub func time() -> TimeOfDay {
         TimeOfDay.from_nanosecond_of_day(self.time_value.nanosecond_of_day())
     }
 
     /// Returns Unix seconds when this civil value is interpreted as UTC.
-    pub func epoch_seconds(self: Self) -> Int {
+    pub func epoch_seconds() -> Int {
         self.date_value.epoch_day() * 86400 + self.time_value.nanosecond_of_day() / 1000000000
     }
 
     /// Returns the fractional nanosecond component.
-    pub func nanosecond(self: Self) -> Int {
+    pub func nanosecond() -> Int {
         self.time_value.nanosecond()
     }
 
     /// Adds a calendar-aware span with date overflow handled explicitly.
-    pub func add(self: Self, span: Span, overflow: Overflow) -> Result<DateTime, CivilError> {
+    pub func add(span: Span, overflow: Overflow) -> Result<DateTime, CivilError> {
         let date_span = Span.from(span.years(), span.months(), span.weeks(), span.days(), 0, 0, 0, 0)
         let adjusted_date = try self.date_value.add(date_span, overflow)
         let clock_delta = (((span.hours() * 60 + span.minutes()) * 60 + span.seconds()) * 1000000000) + span.nanoseconds()
@@ -438,7 +438,7 @@ impl DateTime {
     }
 
     /// Compares two civil date-times lexicographically.
-    pub func compare(self: Self, other: DateTime) -> Ordering {
+    pub func compare(other: DateTime) -> Ordering {
         branch self.date_value.compare(other.date_value) {
             Ordering.Equal -> self.time_value.compare(other.time_value)
             Ordering.Less -> Ordering.Less
@@ -447,7 +447,7 @@ impl DateTime {
     }
 
     /// Returns whether two civil date-times are equal.
-    pub func equal?(self: Self, other: DateTime) -> Bool {
+    pub func equal?(other: DateTime) -> Bool {
         self.date_value.equal?(other.date_value) && self.time_value.equal?(other.time_value)
     }
 }
@@ -459,18 +459,18 @@ pub type YearMonth = & Ordered<YearMonth> & {
 
     // Required public operations; implementations live in impl blocks.
     /// Returns the year.
-    pub func year(self: Self) -> Int [read self.year_value]
+    pub func year() -> Int [read self.year_value]
     /// Returns the month.
-    pub func month(self: Self) -> Int [read self.month_value]
+    pub func month() -> Int [read self.month_value]
     /// Returns the number of days in this month.
-    pub func days(self: Self) -> Int [read self(month_value, year_value)]
+    pub func days() -> Int [read self(month_value, year_value)]
     /// Combines this year-month with a day.
-    pub func on_day(self: Self, day: Int) -> Result<Date, CivilError> [read day, read self(month_value, year_value)]
+    pub func on_day(day: Int) -> Result<Date, CivilError> [read day, read self(month_value, year_value)]
 }
 
 impl YearMonth {
     /// Validates and constructs a year-month.
-    pub func from(year: Int, month: Int) -> Result<YearMonth, CivilError> {
+    pub static func from(year: Int, month: Int) -> Result<YearMonth, CivilError> {
         branch {
             month < 1 || month > 12 -> invalid_year_month(month)
             _ -> Result.Ok(YearMonth {
@@ -480,30 +480,30 @@ impl YearMonth {
     }
 
     /// Returns the year.
-    pub func year(self: Self) -> Int {
+    pub func year() -> Int {
         self.year_value
     }
     /// Returns the month.
-    pub func month(self: Self) -> Int {
+    pub func month() -> Int {
         self.month_value
     }
     /// Returns the number of days in this month.
-    pub func days(self: Self) -> Int {
+    pub func days() -> Int {
         days_in_month(self.year_value, self.month_value)
     }
 
     /// Combines this year-month with a day.
-    pub func on_day(self: Self, day: Int) -> Result<Date, CivilError> {
+    pub func on_day(day: Int) -> Result<Date, CivilError> {
         Date.from(self.year_value, self.month_value, day)
     }
 
     /// Compares two year-month values.
-    pub func compare(self: Self, other: YearMonth) -> Ordering {
+    pub func compare(other: YearMonth) -> Ordering {
         compare_int(self.year_value * 12 + self.month_value, other.year_value * 12 + other.month_value)
     }
 
     /// Returns whether two year-month values are equal.
-    pub func equal?(self: Self, other: YearMonth) -> Bool {
+    pub func equal?(other: YearMonth) -> Bool {
         self.year_value == other.year_value && self.month_value == other.month_value
     }
 }
@@ -515,16 +515,16 @@ pub type MonthDay = {
 
     // Required public operations; implementations live in impl blocks.
     /// Returns the month.
-    pub func month(self: Self) -> Int [read self.month_value]
+    pub func month() -> Int [read self.month_value]
     /// Returns the day of the month.
-    pub func day(self: Self) -> Int [read self.day_value]
+    pub func day() -> Int [read self.day_value]
     /// Places this month-day in a year, rejecting February 29 in a non-leap year.
-    pub func in_year(self: Self, year: Int) -> Result<Date, CivilError> [read self(day_value, month_value), read year]
+    pub func in_year(year: Int) -> Result<Date, CivilError> [read self(day_value, month_value), read year]
 }
 
 impl MonthDay {
     /// Validates a month-day against leap year 2000 so February 29 is representable.
-    pub func from(month: Int, day: Int) -> Result<MonthDay, CivilError> {
+    pub static func from(month: Int, day: Int) -> Result<MonthDay, CivilError> {
         try Date.from(2000, month, day)
         Result.Ok(MonthDay {
             month_value: month, day_value: day
@@ -532,16 +532,16 @@ impl MonthDay {
     }
 
     /// Returns the month.
-    pub func month(self: Self) -> Int {
+    pub func month() -> Int {
         self.month_value
     }
     /// Returns the day of the month.
-    pub func day(self: Self) -> Int {
+    pub func day() -> Int {
         self.day_value
     }
 
     /// Places this month-day in a year, rejecting February 29 in a non-leap year.
-    pub func in_year(self: Self, year: Int) -> Result<Date, CivilError> {
+    pub func in_year(year: Int) -> Result<Date, CivilError> {
         Date.from(year, self.month_value, self.day_value)
     }
 }
@@ -553,18 +553,18 @@ pub type DateInterval = {
 
     // Required public operations; implementations live in impl blocks.
     /// Returns the inclusive start date.
-    pub func start(self: Self) -> Date [read self(start_value.day_value, start_value.month_value, start_value.year_value)]
+    pub func start() -> Date [read self(start_value.day_value, start_value.month_value, start_value.year_value)]
     /// Returns the exclusive end date.
-    pub func end(self: Self) -> Date [read self(end_value.day_value, end_value.month_value, end_value.year_value)]
+    pub func end() -> Date [read self(end_value.day_value, end_value.month_value, end_value.year_value)]
     /// Returns the interval length in civil days.
-    pub func days(self: Self) -> Int [read self(end_value.day_value, end_value.month_value, end_value.year_value, start_value.day_value, start_value.month_value, start_value.year_value)]
+    pub func days() -> Int [read self(end_value.day_value, end_value.month_value, end_value.year_value, start_value.day_value, start_value.month_value, start_value.year_value)]
     /// Returns whether the interval contains a date.
-    pub func contains?(self: Self, date: Date) -> Bool [read date(day_value, month_value, year_value), read self(end_value.day_value, end_value.month_value, end_value.year_value, start_value.day_value, start_value.month_value, start_value.year_value)]
+    pub func contains?(date: Date) -> Bool [read date(day_value, month_value, year_value), read self(end_value.day_value, end_value.month_value, end_value.year_value, start_value.day_value, start_value.month_value, start_value.year_value)]
 }
 
 impl DateInterval {
     /// Constructs `[start, end)`, rejecting an end before the start.
-    pub func from(start: Date, end: Date) -> Result<DateInterval, CivilError> {
+    pub static func from(start: Date, end: Date) -> Result<DateInterval, CivilError> {
         branch end.compare(start) {
             Ordering.Less -> Result.Error(CivilError {
                 field: "end", value: end.epoch_day(), message: "date interval end must not precede its start"
@@ -576,19 +576,19 @@ impl DateInterval {
     }
 
     /// Returns the inclusive start date.
-    pub func start(self: Self) -> Date {
+    pub func start() -> Date {
         Date.from_epoch_day(self.start_value.epoch_day())
     }
     /// Returns the exclusive end date.
-    pub func end(self: Self) -> Date {
+    pub func end() -> Date {
         Date.from_epoch_day(self.end_value.epoch_day())
     }
     /// Returns the interval length in civil days.
-    pub func days(self: Self) -> Int {
+    pub func days() -> Int {
         self.end_value.epoch_day() - self.start_value.epoch_day()
     }
     /// Returns whether the interval contains a date.
-    pub func contains?(self: Self, date: Date) -> Bool {
+    pub func contains?(date: Date) -> Bool {
         date.epoch_day() >= self.start_value.epoch_day() && date.epoch_day() < self.end_value.epoch_day()
     }
 }

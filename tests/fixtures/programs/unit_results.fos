@@ -3,9 +3,9 @@ type Counter = {
 }
 
 impl Counter {
-    func empty(self: Self) {}
-    func done() {}
-    func set(self: Self, value: Int) {
+    func empty() {}
+    static func done() {}
+    func set(value: Int) {
         self.value = value
     }
 }

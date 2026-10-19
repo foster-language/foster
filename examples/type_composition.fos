@@ -9,16 +9,16 @@ type TextSlice = & Named & Sequence<String> & {
 }
 
 impl TextSlice {
-    func empty?(self: Self) -> Bool {
+    func empty?() -> Bool {
         self.text.empty?
     }
-    func length(self: Self) -> Int {
+    func length() -> Int {
         self.text.length
     }
-    func head(self: Self) -> String {
+    func head() -> String {
         self.text.head
     }
-    func rest(self: Self) -> String {
+    func rest() -> String {
         self.text.slice(1, self.text.length)
     }
 }

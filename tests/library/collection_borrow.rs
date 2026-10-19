@@ -8,7 +8,7 @@ import core.option.*
 import static core.option.*
 type Box = { pub value: Int }
 impl Box {
-    func borrow(self: Box) -> Option<ref[self] Int> { Option.Some(ref self.value) }
+    func borrow() -> Option<ref[self] Int> { Option.Some(ref self.value) }
 }
 func main() -> Int {
     let owner = Box { value: 1 }
@@ -134,7 +134,7 @@ fn consuming_receiver_cannot_return_a_reference_into_itself() {
     let source = r#"
 type Box = { value: Int }
 impl Box {
-    func invalid(self: Box) -> ref[self] Int [consume self] { ref self.value }
+    func invalid() -> ref[self] Int [consume self] { ref self.value }
 }
 func main() { Box { value: 42 }.invalid() }
 "#;

@@ -148,21 +148,21 @@ type OtherQueue = & Queue<Int> & {
     data: ListQueue<Int>, marker: Int
 }
 impl OtherQueue {
-    func length(self: Self) -> Int {
+    func length() -> Int {
         self.data.length()
     }
-    func empty?(self: Self) -> Bool {
+    func empty?() -> Bool {
         self.data.empty?()
     }
-    func iterator(self: Self) -> Iterator<Int> {
+    func iterator() -> Iterator<Int> {
         self.data.iterator()
     }
-    func push(self: Self, value: Int) -> Self [consume self, consume value] {
+    func push(value: Int) -> Self [consume self, consume value] {
         OtherQueue {
             data: self.data.push(value), marker: self.marker
         }
     }
-    func pop(self: Self) -> Option<QueueItem<Int, Self>> [consume self] {
+    func pop() -> Option<QueueItem<Int, Self>> [consume self] {
         branch self.data.pop() {
             Option.None -> Option.None
             Option.Some(item) -> Option.Some(QueueItem {
@@ -177,21 +177,21 @@ type OtherStack = & Stack<Int> & {
     marker: Int, data: ListStack<Int>
 }
 impl OtherStack {
-    func length(self: Self) -> Int {
+    func length() -> Int {
         self.data.length()
     }
-    func empty?(self: Self) -> Bool {
+    func empty?() -> Bool {
         self.data.empty?()
     }
-    func iterator(self: Self) -> Iterator<Int> {
+    func iterator() -> Iterator<Int> {
         self.data.iterator()
     }
-    func push(self: Self, value: Int) -> Self [consume self, consume value] {
+    func push(value: Int) -> Self [consume self, consume value] {
         OtherStack {
             data: self.data.push(value), marker: self.marker
         }
     }
-    func pop(self: Self) -> Option<StackItem<Int, Self>> [consume self] {
+    func pop() -> Option<StackItem<Int, Self>> [consume self] {
         branch self.data.pop() {
             Option.None -> Option.None
             Option.Some(item) -> Option.Some(StackItem {
@@ -206,26 +206,26 @@ type OtherDeque = & Deque<Int> & {
     marker: Int, data: ListDeque<Int>
 }
 impl OtherDeque {
-    func length(self: Self) -> Int {
+    func length() -> Int {
         self.data.length()
     }
-    func empty?(self: Self) -> Bool {
+    func empty?() -> Bool {
         self.data.empty?()
     }
-    func iterator(self: Self) -> Iterator<Int> {
+    func iterator() -> Iterator<Int> {
         self.data.iterator()
     }
-    func push_front(self: Self, value: Int) -> Self [consume self, consume value] {
+    func push_front(value: Int) -> Self [consume self, consume value] {
         OtherDeque {
             data: self.data.push_front(value), marker: self.marker
         }
     }
-    func push_back(self: Self, value: Int) -> Self [consume self, consume value] {
+    func push_back(value: Int) -> Self [consume self, consume value] {
         OtherDeque {
             data: self.data.push_back(value), marker: self.marker
         }
     }
-    func pop_front(self: Self) -> Option<DequeItem<Int, Self>> [consume self] {
+    func pop_front() -> Option<DequeItem<Int, Self>> [consume self] {
         branch self.data.pop_front() {
             Option.None -> Option.None
             Option.Some(item) -> Option.Some(DequeItem {
@@ -235,7 +235,7 @@ impl OtherDeque {
             })
         }
     }
-    func pop_back(self: Self) -> Option<DequeItem<Int, Self>> [consume self] {
+    func pop_back() -> Option<DequeItem<Int, Self>> [consume self] {
         branch self.data.pop_back() {
             Option.None -> Option.None
             Option.Some(item) -> Option.Some(DequeItem {
@@ -330,7 +330,7 @@ type Payload = & Drop & {
     text: String
 }
 impl Payload {
-    func deinit(self: Self) -> () {
+    func deinit() -> () {
         assert(not self.text.empty?, "payload released intact")
     }
 }

@@ -60,7 +60,7 @@ import core.drop
 import core.drop.*
 import static core.drop.*
 type Item = & Drop & {}
-impl Item { func deinit(self: Self) -> () {} }
+impl Item { func deinit() -> () {} }
 enum Outcome = Match(Item) | Failed
 func pass(input: Outcome) -> Outcome {
     let value = try<Match> input

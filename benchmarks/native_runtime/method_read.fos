@@ -2,7 +2,7 @@ type Pair = {
     left: Int, right: Int
 }
 impl Pair {
-    func sum(self: Self) -> Int {
+    func sum() -> Int {
         self.left + self.right
     }
 }

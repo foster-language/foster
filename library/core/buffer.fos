@@ -15,11 +15,11 @@ import core.option.Option
 type BufferHost = {}
 impl BufferHost {
     /// Allocates initialized signed 64-bit elements.
-    func integers(length: Int, initial: Int) -> List<Int> = intrinsic("buffer.integers")
+    static func integers(length: Int, initial: Int) -> List<Int> = intrinsic("buffer.integers")
     /// Allocates initialized IEEE binary64 elements.
-    func floats(length: Int, initial: Float) -> List<Float> = intrinsic("buffer.floats")
+    static func floats(length: Int, initial: Float) -> List<Float> = intrinsic("buffer.floats")
     /// Allocates initialized unsigned byte elements.
-    func bytes(length: Int, initial: Byte) -> List<Byte> = intrinsic("buffer.bytes")
+    static func bytes(length: Int, initial: Byte) -> List<Byte> = intrinsic("buffer.bytes")
 }
 
 /// A uniquely owned, fixed-length typed allocation.
@@ -29,34 +29,34 @@ pub type Buffer<T> = {
     storage: List<T>
 
     /// Returns the number of initialized elements.
-    pub func length(self: Self) -> Int [read self]
+    pub func length() -> Int [read self]
     /// Copies the scalar at index. Fails unless 0 <= index < length().
     /// Lowers directly to checked indexing without generic Copy dispatch.
-    pub func read(self: Self, index: Int) -> T [read self]
+    pub func read(index: Int) -> T [read self]
 }
 
 impl Buffer<T> {
     /// Returns the number of initialized elements.
-    pub func length(self: Self) -> Int {
+    pub func length() -> Int {
         self.storage.length
     }
 
     /// Copies the scalar at index. Fails unless 0 <= index < length().
     /// Lowers directly to checked indexing without generic Copy dispatch.
-    pub func read(self: Self, index: Int) -> T [read self] = intrinsic("buffer.read")
+    pub func read(index: Int) -> T [read self] = intrinsic("buffer.read")
 
     /// Replaces the element at index without allocating or changing length.
     /// Fails unless 0 <= index < length(). Preserves live element and view aliases.
-    pub func write(self: ref[self] Self, index: Int, value: T) -> () [mut self] = intrinsic("buffer.write")
+    pub ref func write(index: Int, value: T) -> () [mut self] = intrinsic("buffer.write")
 
     /// Borrows one initialized element; invalid indexes return None.
-    pub func borrow(self: ref[self] Self, index: Int) -> Option<ref[self] T> {
+    pub ref func borrow(index: Int) -> Option<ref[self] T> {
         self.storage.borrow(index)
     }
 
     /// Borrows the half-open range [start, end), without copying its elements.
     /// Asserts unless 0 <= start <= end <= length().
-    pub func view(self: ref[self] Self, start: Int, end: Int) -> BufferView<ref[self] Buffer<T>> {
+    pub ref func view(start: Int, end: Int) -> BufferView<ref[self] Buffer<T>> {
         assert(start >= 0 && end >= start && end <= self.storage.length, "Buffer view out of bounds")
         BufferView {
             source: ref self, start, count: end - start
@@ -72,27 +72,24 @@ pub type BufferView<Storage> = {
     count: Int
 }
 
-impl BufferView<T> {
+impl<T> BufferView<ref[self] Buffer<T>> {
     /// Returns the number of elements visible through this view.
-    pub func length(self: BufferView<ref[self] Buffer<T>>) -> Int {
+    pub func length() -> Int {
         self.count
     }
-
     /// Copies one element. Asserts unless 0 <= index < length().
-    pub func read(self: BufferView<ref[self] Buffer<T>>, index: Int) -> T {
+    pub func read(index: Int) -> T {
         assert(index >= 0 && index < self.count, "Buffer view index out of bounds")
         self.source.read(self.start + index)
     }
-
     /// Replaces one element in the owner without resizing its allocation.
     /// Asserts unless 0 <= index < length().
-    pub func write(self: BufferView<ref[self] Buffer<T>>, index: Int, value: T) -> () {
+    pub func write(index: Int, value: T) -> () {
         assert(index >= 0 && index < self.count, "Buffer view index out of bounds")
         self.source.write(self.start + index, move value)
     }
-
     /// Borrows an element relative to the view; invalid indexes return None.
-    pub func borrow(self: BufferView<ref[self] Buffer<T>>, index: Int) -> Option<ref[self] T> {
+    pub func borrow(index: Int) -> Option<ref[self] T> {
         branch {
             index < 0 || index >= self.count -> Option.None
             _ -> self.source.borrow(self.start + index)

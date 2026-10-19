@@ -9,23 +9,23 @@ type Counter = {
 type Inspector = {}
 
 impl Counter {
-    func increment(self: Counter, amount: Int) -> Int [mut self] {
+    func increment(amount: Int) -> Int [mut self] {
         self.value = self.value + amount
         self.value
     }
 
-    func snapshot(self: Counter) -> Int [read self.value] {
+    func snapshot() -> Int [read self.value] {
         self.value
     }
 
-    func assign(self: Counter, value: Int) -> Int [mut self] {
+    func assign(value: Int) -> Int [mut self] {
         self.value = value
         self.value
     }
 }
 
 impl Inspector {
-    func inspect(self: Inspector, counter: Counter) -> Int [read counter.value] {
+    func inspect(counter: Counter) -> Int [read counter.value] {
         counter.value
     }
 }

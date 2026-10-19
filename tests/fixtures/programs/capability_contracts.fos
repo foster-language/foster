@@ -16,34 +16,34 @@ type CountOnly = {
     count: Int
 }
 impl CountOnly {
-    func length(self: Self) -> Int [read self.count] {
+    func length() -> Int [read self.count] {
         self.count
     }
-    func empty?(self: Self) -> Bool [read self.count] {
+    func empty?() -> Bool [read self.count] {
         self.count == 0
     }
 }
 
 type ClientOnly = {}
 impl ClientOnly {
-    func connect(self: Self, address: String, port: Int) -> Result<Int, NetworkError> [consume address] {
+    func connect(address: String, port: Int) -> Result<Int, NetworkError> [consume address] {
         Result.Ok(port)
     }
 }
 
 type ServerOnly = {}
 impl ServerOnly {
-    func listen(self: Self, address: String, port: Int) -> Result<Int, NetworkError> [consume address] {
+    func listen(address: String, port: Int) -> Result<Int, NetworkError> [consume address] {
         Result.Ok(port + 1)
     }
 }
 
 type Both = & NetworkProvider<Int, Int> & {}
 impl Both {
-    func connect(self: Self, address: String, port: Int) -> Result<Int, NetworkError> [consume address] {
+    func connect(address: String, port: Int) -> Result<Int, NetworkError> [consume address] {
         Result.Ok(port)
     }
-    func listen(self: Self, address: String, port: Int) -> Result<Int, NetworkError> [consume address] {
+    func listen(address: String, port: Int) -> Result<Int, NetworkError> [consume address] {
         Result.Ok(port + 1)
     }
 }

@@ -51,7 +51,7 @@ func analyze(source: String) -> Metrics {
 }
 
 impl Analyzer {
-    func run(self: Self) -> Metrics {
+    func run() -> Metrics {
         analyze(self.source)
     }
 }

@@ -62,7 +62,7 @@ import static core.result.*
 
 type Worker = {}
 impl Worker {
-    func value(self: Worker) -> Int { 1 }
+    func value() -> Int { 1 }
 }
 func wait(worker: Remote<Worker>) -> Int {
     let values = [10]
@@ -570,7 +570,7 @@ func main() -> Int {
 
 #[test]
 fn ownership_revision_and_diagnostic_catalog_match_current_contract() {
-    assert_eq!(foster::ownership::LANGUAGE_VERSION, 22);
+    assert_eq!(foster::ownership::LANGUAGE_VERSION, 23);
     assert_eq!(foster::ownership::MODEL_VERSION, 5);
     assert_eq!(
         foster::ownership::diagnostics::CATALOG
@@ -673,7 +673,7 @@ fn language_version_six_separates_qualification_from_member_access() {
 enum Choice = Value(Int)
 type Box = { value: Choice }
 impl Box {
-    func make(value: Choice) -> Box { Box { value } }
+    static func make(value: Choice) -> Box { Box { value } }
 }
 func main() -> Choice { Box.make(Choice.Value(1)).value }
 "#;

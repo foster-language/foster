@@ -585,7 +585,9 @@ impl<'a> Checker<'a> {
                     .chain(function.return_type.iter())
                     .any(uses_self_type)
             {
-                let owner_annotation = if function.receiver.is_some() {
+                let owner_annotation = if let Some(target) = &function.owner_type {
+                    target.clone()
+                } else if function.receiver.is_some() {
                     let annotation = function.parameters[0]
                         .ty
                         .as_ref()

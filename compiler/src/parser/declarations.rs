@@ -362,11 +362,16 @@ impl Parser {
                 self.newlines();
                 while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
                     let documentation = self.documentation();
-                    let method_follows = self.at(&TokenKind::Func)
+                    let method_follows = self.at(&TokenKind::Ref)
+                        || self.at(&TokenKind::Static)
+                        || self.at(&TokenKind::Func)
                         || (self.at(&TokenKind::Pub)
-                            && self
-                                .peek_n(1)
-                                .is_some_and(|token| token.kind == TokenKind::Func));
+                            && self.peek_n(1).is_some_and(|token| {
+                                matches!(
+                                    token.kind,
+                                    TokenKind::Func | TokenKind::Static | TokenKind::Ref
+                                )
+                            }));
                     if !method_follows {
                         return Err(
                             self.error("enum shared bodies may only declare required methods")
@@ -437,11 +442,16 @@ impl Parser {
         let mut methods = Vec::new();
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
             let documentation = self.documentation();
-            let method_follows = self.at(&TokenKind::Func)
+            let method_follows = self.at(&TokenKind::Ref)
+                || self.at(&TokenKind::Static)
+                || self.at(&TokenKind::Func)
                 || (self.at(&TokenKind::Pub)
-                    && self
-                        .peek_n(1)
-                        .is_some_and(|token| token.kind == TokenKind::Func));
+                    && self.peek_n(1).is_some_and(|token| {
+                        matches!(
+                            token.kind,
+                            TokenKind::Func | TokenKind::Static | TokenKind::Ref
+                        )
+                    }));
             if method_follows {
                 methods.push(self.method_requirement(documentation)?);
                 if !self.at(&TokenKind::RBrace) {
@@ -508,6 +518,11 @@ impl Parser {
     ) -> Result<MethodRequirement, FosterError> {
         let start = self.peek().range.start;
         let public = self.take(&TokenKind::Pub);
+        let borrowed = self.take(&TokenKind::Ref);
+        let static_ = self.take(&TokenKind::Static);
+        if borrowed && static_ {
+            return Err(self.error("a static function cannot have a reference receiver"));
+        }
         self.expect(&TokenKind::Func, "expected `func`")?;
         let name = self.expect_ident("expected required method name")?;
         let type_parameters = self.function_parameters()?;
@@ -528,7 +543,14 @@ impl Parser {
             &TokenKind::RParen,
             "expected `)` after required method parameters",
         )?;
-        let receiver = self.receiver_parameter(&parameters)?;
+        self.reject_explicit_self(&parameters)?;
+        let receiver = !static_;
+        if receiver {
+            parameters.insert(
+                0,
+                Self::implicit_self(start, TypeExpr::Named("Self".into(), Vec::new()), borrowed),
+            );
+        }
         let return_type = if self.take(&TokenKind::Arrow) {
             Some(self.type_expr()?)
         } else {
@@ -595,15 +617,42 @@ impl Parser {
         }
         let start = self.peek().range.start;
         self.expect(&TokenKind::Impl, "expected `impl`")?;
+        let specialized = self.at(&TokenKind::Less);
+        let (special_parameters, special_constraints) = if specialized
+            && self
+                .peek_n(1)
+                .is_some_and(|token| token.kind == TokenKind::Greater)
+        {
+            self.advance();
+            self.advance();
+            (Vec::new(), Vec::new())
+        } else if specialized {
+            self.constrained_function_parameters()?
+        } else {
+            (Vec::new(), Vec::new())
+        };
         let owner_span = self.peek().range.clone();
-        let mut owner = self.expect_type_binding("expected type name after `impl`")?;
+        let target = if specialized {
+            Some(self.type_expr()?)
+        } else {
+            None
+        };
+        let target_owner = match &target {
+            Some(TypeExpr::Named(name, _)) => Some(name.clone()),
+            Some(_) => return Err(self.error("an impl target must be a named type")),
+            None => None,
+        };
+        let mut owner = match target_owner {
+            Some(owner) => owner,
+            None => self.expect_type_binding("expected type name after `impl`")?,
+        };
         while self.take(&TokenKind::Dot) {
             owner.push('.');
             owner.push_str(&self.expect_type_binding("expected child type name")?);
         }
-        let mut type_parameters = Vec::new();
-        let mut constraints = Vec::new();
-        if self.take(&TokenKind::Less) {
+        let mut type_parameters = special_parameters;
+        let mut constraints = special_constraints;
+        if !specialized && self.take(&TokenKind::Less) {
             self.newlines();
             loop {
                 let parameter = self.expect_type_binding("expected impl type parameter")?;
@@ -638,6 +687,15 @@ impl Parser {
             let documentation = self.documentation();
             let mut function =
                 self.member_function(documentation, Some(&owner), &type_parameters)?;
+            function.owner_type = target.clone();
+            if function.receiver
+                && let Some(target) = &target
+            {
+                match function.parameters[0].ty.as_mut().unwrap() {
+                    TypeExpr::Reference { value, .. } => **value = target.clone(),
+                    ty => *ty = target.clone(),
+                }
+            }
             function
                 .constraints
                 .splice(0..0, constraints.iter().cloned());
@@ -650,6 +708,7 @@ impl Parser {
                 span: start..self.tokens[self.current.saturating_sub(1)].range.end,
                 owner_span,
                 owner,
+                target,
                 parameters: type_parameters,
                 constraints,
             },
@@ -665,6 +724,14 @@ impl Parser {
     ) -> Result<Function, FosterError> {
         let start = self.peek().range.start;
         let public = self.take(&TokenKind::Pub);
+        let borrowed = self.take(&TokenKind::Ref);
+        let static_ = self.take(&TokenKind::Static);
+        if borrowed && (static_ || impl_owner.is_none()) {
+            return Err(self.error("`ref func` requires an instance method inside an `impl` block"));
+        }
+        if static_ && impl_owner.is_none() {
+            return Err(self.error("`static func` is only allowed inside an `impl` block"));
+        }
         self.expect(&TokenKind::Func, "expected `func`")?;
         let member = if impl_owner.is_some() {
             self.expect_member_ident("expected function name")?
@@ -700,8 +767,13 @@ impl Parser {
             }
         }
         self.expect(&TokenKind::RParen, "expected `)` after parameters")?;
-        let receiver = self.receiver_parameter(&parameters)?;
+        self.reject_explicit_self(&parameters)?;
+        let receiver = impl_owner.is_some() && !static_;
         if receiver {
+            parameters.insert(
+                0,
+                Self::implicit_self(start, TypeExpr::Named("Self".into(), Vec::new()), borrowed),
+            );
             let Some(owner) = impl_owner else {
                 return Err(
                     self.error("methods with `self` must be declared inside an `impl` block")
@@ -767,6 +839,7 @@ impl Parser {
             documentation,
             name,
             owner,
+            owner_type: None,
             receiver,
             public,
             intrinsic,
@@ -783,21 +856,27 @@ impl Parser {
         })
     }
 
-    fn receiver_parameter(&self, parameters: &[Parameter]) -> Result<bool, FosterError> {
-        let receiver = parameters
-            .first()
-            .is_some_and(|parameter| parameter.name == "self");
-        if parameters
-            .iter()
-            .skip(usize::from(receiver))
-            .any(|parameter| parameter.name == "self")
-        {
-            return Err(self.error("`self` is a receiver and must be the first parameter"));
+    fn reject_explicit_self(&self, parameters: &[Parameter]) -> Result<(), FosterError> {
+        if parameters.iter().any(|parameter| parameter.name == "self") {
+            return Err(self.error("`self` is implicit and cannot be declared as a parameter"));
         }
-        if receiver && parameters[0].ty.is_none() {
-            return Err(self.error("receiver `self` needs an explicit type; use `self: Self`"));
+        Ok(())
+    }
+
+    fn implicit_self(start: usize, ty: TypeExpr, borrowed: bool) -> Parameter {
+        Parameter {
+            span: start..start,
+            name: "self".into(),
+            ty: Some(if borrowed {
+                TypeExpr::Reference {
+                    group: "self".into(),
+                    value: Box::new(ty),
+                }
+            } else {
+                ty
+            }),
+            type_span: None,
         }
-        Ok(receiver)
     }
 
     pub(super) fn function_parameters(&mut self) -> Result<Vec<String>, FosterError> {

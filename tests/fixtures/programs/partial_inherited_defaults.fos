@@ -1,10 +1,10 @@
 pub type Sized = {
-    pub func length(self: Self) -> Int
-    pub func empty?(self: Self) -> Bool
+    pub func length() -> Int
+    pub func empty?() -> Bool
 }
 
 impl Sized {
-    pub func empty?(self: Self) -> Bool {
+    pub func empty?() -> Bool {
         self.length() == 0
     }
 }
@@ -13,7 +13,7 @@ pub type Counted = & Sized & {
     count: Int
 }
 impl Counted {
-    pub func length(self: Self) -> Int {
+    pub func length() -> Int {
         self.count
     }
 }
@@ -22,7 +22,7 @@ pub type Pair = & Sized & {
     first: Int, second: Int
 }
 impl Pair {
-    pub func length(self: Self) -> Int {
+    pub func length() -> Int {
         self.first + self.second
     }
 }

@@ -40,7 +40,7 @@ fn reserved_self_type_cannot_be_a_rename_target() {
 #[test]
 fn self_type_hover_and_definition_follow_the_enclosing_owner() {
     let (mut workspace, uri, _) = fixture_workspace();
-    let source = "type Item = { pub func identity(self: Self) -> Self [consume self] }\nimpl Item { func identity(self: Self) -> Self [consume self] { move self } }\n";
+    let source = "type Item = { pub func identity() -> Self [consume self] }\nimpl Item { func identity() -> Self [consume self] { move self } }\n";
     workspace.open(uri.clone(), source.into(), 1);
     for (offset, _) in source.match_indices("Self") {
         let params = TextDocumentPositionParams::new(
@@ -98,7 +98,7 @@ fn multiline_method_error_keeps_the_enclosing_function_available() {
 
 #[test]
 fn constrained_method_signature_displays_requirements() {
-    let compilation = crate::compile("import core.copy.*\ntype Box<T> = { value: T }\nimpl Box<T & Copy> { func copied(self: Self) -> T [read self] { self.value.copy() } }\nfunc main() -> Int { Box { value: 42 }.copied() }").unwrap();
+    let compilation = crate::compile("import core.copy.*\ntype Box<T> = { value: T }\nimpl Box<T & Copy> { func copied() -> T [read self] { self.value.copy() } }\nfunc main() -> Int { Box { value: 42 }.copied() }").unwrap();
     let module = compilation.hir.module_named("main").unwrap();
     let method = compilation
         .hir
@@ -183,9 +183,7 @@ fn failed_comparison_keeps_parameter_method_navigation_and_operand_locations() {
     let core = include_str!("../../../library/core/string.fos");
     let line = core
         .lines()
-        .position(|line| {
-            line.contains("pub func iterator(self: Self)") && line.trim_end().ends_with("{")
-        })
+        .position(|line| line.contains("pub func iterator()") && line.trim_end().ends_with("{"))
         .unwrap() as u32;
     assert_eq!(location.range.start, Position::new(line, 13));
 }
@@ -235,7 +233,7 @@ fn argument_diagnostics_name_the_callee_and_follow_edited_call_ranges() {
     let body = "func helper(left: Int, right: Int) -> Int { left + right }\n\
                 func integer_text?() -> Int { helper(1) }\n\
                 type Parser = {}\n\
-                impl Parser { func take(self: Parser, count: Int) -> Int { count } }\n\
+                impl Parser { func take(count: Int) -> Int { count } }\n\
                 func declare_array_table(parser: Parser) -> Int { parser.take(1, 2) }\n";
     let generation = std::sync::atomic::AtomicU64::new(0);
     let (sender, receiver) = crossbeam_channel::unbounded();
@@ -475,8 +473,8 @@ fn associated_function_navigation_uses_the_type_namespace() {
         uri_to_path(&location.uri).unwrap(),
         root.join("collection.fos")
     );
-    assert_eq!(location.range.start, Position::new(5, 13));
-    assert_eq!(location.range.end, Position::new(5, 19));
+    assert_eq!(location.range.start, Position::new(5, 20));
+    assert_eq!(location.range.end, Position::new(5, 26));
 
     let references = workspace
         .references(&ReferenceParams {
@@ -547,7 +545,12 @@ fn hover_reports_inferred_local_and_function_types() {
 #[test]
 fn document_symbols_do_not_need_semantic_analysis() {
     let (mut workspace, uri, _) = fixture_workspace();
-    workspace.open(uri.clone(), "type Item = {}\nimpl Item { func value(self: Item) -> Int { 1 } }\nfunc broken() -> Int { false }".into(), 1);
+    workspace.open(
+        uri.clone(),
+        "type Item = {}\nimpl Item { func value() -> Int { 1 } }\nfunc broken() -> Int { false }"
+            .into(),
+        1,
+    );
     crate::compiler::cancellation::scope(
         || true,
         || {
@@ -687,7 +690,7 @@ fn string_method_hover_publishes_library_documentation() {
     assert!(
         hover
             .value
-            .contains("func slice(self: String, start: Int, end: Int) -> String"),
+            .contains("func slice(start: Int, end: Int) -> String"),
         "{}",
         hover.value
     );
@@ -1238,12 +1241,12 @@ fn callable_contract_members_provide_hover_signature_and_definition() {
     let (mut workspace, uri, _) = fixture_workspace();
     let source = r#"type Identified = {
     /// Adds an amount to this value.
-    pub func offset(self: Self, amount: Int) -> Int [read self]
+    pub func offset(amount: Int) -> Int [read self]
 }
 
 type User = & Identified & { value: Int }
 impl User {
-    func offset(self: User, amount: Int) -> Int { self.value + amount }
+    func offset(amount: Int) -> Int { self.value + amount }
 }
 
 func apply(value: Identified) -> Int {
@@ -1262,9 +1265,7 @@ func main() -> Int { apply(User { value: 40 }) }
         panic!("expected markdown hover")
     };
     assert!(
-        contents
-            .value
-            .contains("func offset(self: Self, amount: Int) -> Int"),
+        contents.value.contains("func offset(amount: Int) -> Int"),
         "{}",
         contents.value
     );
@@ -1283,11 +1284,7 @@ func main() -> Int { apply(User { value: 40 }) }
             work_done_progress_params: Default::default(),
         })
         .unwrap();
-    assert!(
-        help.signatures[0]
-            .label
-            .contains("offset(self: Self, amount: Int)")
-    );
+    assert!(help.signatures[0].label.contains("offset(amount: Int)"));
     assert!(matches!(
         &help.signatures[0].documentation,
         Some(Documentation::MarkupContent(contents)) if contents.value.contains("Adds an amount")
@@ -1297,7 +1294,7 @@ func main() -> Int { apply(User { value: 40 }) }
 #[test]
 fn impl_member_rename_from_its_declaration_preserves_other_owners() {
     let (mut workspace, uri, _) = fixture_workspace();
-    let source = "type Left = {}\ntype Right = {}\nimpl Left {\n    func read(self: Self) -> Int { 20 }\n}\nimpl Right {\n    func read(self: Self) -> Int { 22 }\n}\nfunc main() -> Int { Left {}.read() + Right {}.read() }\n";
+    let source = "type Left = {}\ntype Right = {}\nimpl Left {\n    func read() -> Int { 20 }\n}\nimpl Right {\n    func read() -> Int { 22 }\n}\nfunc main() -> Int { Left {}.read() + Right {}.read() }\n";
     workspace.open(uri.clone(), source.into(), 1);
     let edit = workspace
         .rename(&RenameParams {
@@ -1350,7 +1347,7 @@ fn definition_resolves_instance_methods_from_receiver_types() {
         uri_to_path(&location.uri).unwrap(),
         root.join("collection.fos")
     );
-    assert_eq!(location.range.start, Position::new(9, 13));
+    assert_eq!(location.range.start, Position::new(12, 13));
 }
 
 #[test]
@@ -1359,14 +1356,14 @@ fn definition_resolves_question_mark_instance_methods() {
     let source = r#"type Parser = { remaining: String }
 
 impl Parser {
-    func peek?(self: Parser, expected: CodePoint) -> Bool { false }
-    func newline?(self: Parser) -> Bool { false }
+    func peek?(expected: CodePoint) -> Bool { false }
+    func newline?() -> Bool { false }
 
-    func skip(self: Parser) -> Bool {
+    func skip() -> Bool {
         self.peek?('#')
     }
 
-    func line(self: Parser) -> Bool {
+    func line() -> Bool {
         self.newline?()
     }
 }
@@ -1395,9 +1392,9 @@ fn definition_resolves_enum_instance_methods() {
     let (mut workspace, uri, _) = fixture_workspace();
     let source = r#"enum Choice<T> = Value(T) | Empty
 
-impl Choice {
+impl<T> Choice<T> {
     /// Returns whether this choice contains a value.
-    func present?<T>(self: Choice<T>) -> Bool {
+    func present?() -> Bool {
         branch self {
             Choice.Value(_) -> true
             Choice.Empty -> false
@@ -1452,9 +1449,7 @@ func main() -> Int {
     let core = include_str!("../../../library/core/int.fos");
     let line = core
         .lines()
-        .position(|line| {
-            line.contains("pub func power(self: Self,") && line.trim_end().ends_with("{")
-        })
+        .position(|line| line.contains("pub func power(") && line.trim_end().ends_with("{"))
         .unwrap() as u32;
     assert_eq!(location.range.start, Position::new(line, 13));
 }
@@ -1737,23 +1732,23 @@ fn overloaded_contract_calls_use_the_selected_requirement_for_lsp_features() {
     let (mut workspace, uri, _) = fixture_workspace();
     let source = r#"type IntegerRenderer = {
     /// Renders an integer.
-    pub func render(self: Self, value: Int) -> String [read self]
+    pub func render(value: Int) -> String [read self]
 }
 
 type CodePointRenderer = {
     /// Renders a code point.
-    pub func render(self: Self, value: CodePoint) -> String [read self]
+    pub func render(value: CodePoint) -> String [read self]
 }
 
 type Renderer = & IntegerRenderer & CodePointRenderer & {
-    pub func render(self: Self, value: Int) -> String [read self]
+    pub func render(value: Int) -> String [read self]
 }
 
 type Formatter = & Renderer & {}
 
 impl Formatter {
-    func render(self: Formatter, value: Int) -> String { "integer" }
-    func render(self: Formatter, value: CodePoint) -> String { "code point" }
+    func render(value: Int) -> String { "integer" }
+    func render(value: CodePoint) -> String { "code point" }
 }
 
 func inspect(value: Renderer) -> String {
@@ -1773,7 +1768,7 @@ func main() -> String { inspect(Formatter {}) }
         panic!("expected markdown hover")
     };
     assert!(
-        hover.value.contains("render(self: Self, value: CodePoint)"),
+        hover.value.contains("render(value: CodePoint)"),
         "{}",
         hover.value
     );
@@ -1795,7 +1790,7 @@ func main() -> String { inspect(Formatter {}) }
     assert!(
         help.signatures[0]
             .label
-            .contains("render(self: Self, value: CodePoint)")
+            .contains("render(value: CodePoint)")
     );
 }
 

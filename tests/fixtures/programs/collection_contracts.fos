@@ -27,13 +27,13 @@ type Bag = & Collection<Int> & {
     values: List<Int>
 }
 impl Bag {
-    func empty?(self: Self) -> Bool {
+    func empty?() -> Bool {
         self.values.empty?
     }
-    func length(self: Self) -> Int {
+    func length() -> Int {
         self.values.length
     }
-    func iterator(self: Self) -> Iterator<Int> {
+    func iterator() -> Iterator<Int> {
         self.values.iterator()
     }
 }

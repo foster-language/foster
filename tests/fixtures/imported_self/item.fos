@@ -3,7 +3,7 @@ pub type Item = {
 }
 
 impl Item {
-    pub func new() -> Self {
+    pub static func new() -> Self {
         Item {
             value: 42
         }
@@ -15,7 +15,7 @@ pub type Box<T> = {
 }
 
 impl Box<T> {
-    pub func new(value: T) -> Self [consume value] {
+    pub static func new(value: T) -> Self [consume value] {
         Box {
             value
         }

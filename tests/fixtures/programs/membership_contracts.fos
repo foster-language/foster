@@ -16,7 +16,7 @@ type LookupOnly = {
     item: Item
 }
 impl LookupOnly {
-    func borrow(self: Self, key: String) -> Option<ref[self] Item> [read self, read key] {
+    func borrow(key: String) -> Option<ref[self] Item> [read self, read key] {
         branch {
             key == "answer" -> Option.Some(ref self.item)
             _ -> Option.None
@@ -25,13 +25,13 @@ impl LookupOnly {
 }
 type KeysOnly = {}
 impl KeysOnly {
-    func contains_key?(self: Self, key: String) -> Bool [read key] {
+    func contains_key?(key: String) -> Bool [read key] {
         key == "answer"
     }
 }
 type MembersOnly = {}
 impl MembersOnly {
-    func contains?(self: Self, value: Int) -> Bool [read value] {
+    func contains?(value: Int) -> Bool [read value] {
         value == 42
     }
 }
