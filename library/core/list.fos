@@ -111,7 +111,8 @@ pub type List<T> = & Sequence<T> & Collection<T> & {
     pub func borrow(index: Int) -> Option<ref[self] T> [read self]
     /// Removes and returns an owned element, preserving the list and remaining order.
     /// Invalid indexes return None without changing the list. Takes O(n) time.
-    pub func remove(index: Int) -> Option<T> [mut self, reshape self.items]
+    /// Replaces list storage and invalidates existing element borrows and views.
+    pub func remove(index: Int) -> Option<T> [reshape self]
 
     /// Borrows a constant-time view of the half-open range `[start, end)` without copying elements.
     /// Asserts unless `0 <= start <= end <= length`. The view cannot outlive or survive reshaping the source.
@@ -177,7 +178,7 @@ pub type SliceIterator<Storage> = {
 
 impl<T> SliceIterator<ref[self] Slice<ref[self] List<T>>> {
     /// Advances the cursor and borrows the next element, or returns None after exhaustion.
-    pub ref func next() -> Option<ref[self] T> {
+    pub func next() -> Option<ref[self] T> {
         return Option.None if self.index >= self.end
         let index = self.index
         self.index = self.index + 1
@@ -368,7 +369,8 @@ impl List<T> {
 
     /// Removes and returns an owned element, preserving the list and remaining order.
     /// Invalid indexes return None without changing the list. Takes O(n) time.
-    pub ref func remove(index: Int) -> Option<T> [mut self, reshape self.items] {
+    /// Replaces list storage and invalidates existing element borrows and views.
+    pub func remove(index: Int) -> Option<T> [reshape self] {
         return Option.None if index < 0 || index >= self.length
         let removed = Option.None
         let entries = removal_entries(self)

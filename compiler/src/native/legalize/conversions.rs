@@ -270,6 +270,7 @@ pub(super) fn shared_capture_arguments(
     expected_types: &[NativeType],
     layouts: &LayoutRegistry,
     values: &mut ir::ValueBuilder,
+    reference_homes: &std::collections::HashMap<u16, ir::Value>,
     instructions: &mut Vec<(ir::Instruction, Vec<ir::Value>)>,
     function: &str,
 ) -> Result<(Vec<ir::Value>, Vec<ir::Value>), FosterError> {
@@ -284,6 +285,15 @@ pub(super) fn shared_capture_arguments(
         // slot contains an erased value. Unboxing first mistakes that value
         // for a reference handle and produces an invalid callback environment.
         if *mode == crate::hir::CaptureMode::Ref {
+            if let Some(reference) = values
+                .hint(value.index())
+                .and_then(|home| reference_homes.get(&home).copied())
+            {
+                // Capturing a borrowed parameter must retain its caller's address,
+                // rather than taking the address of this frame's loaded snapshot.
+                lowered.push(reference);
+                continue;
+            }
             let NativeType::Object(layout) = expected else {
                 return Err(native_error(format!(
                     "native closure `{function}` has a non-reference capture ABI"

@@ -261,9 +261,11 @@ it does not add another reference layer or extend the origin's lifetime.
 
 `self` is the implicit first parameter of an instance method and follows the same group
 rule as every other parameter. Module and static functions cannot name that group.
-An ordinary implicit receiver is a borrowed value parameter. `ref func` instead
-provides an explicit reference receiver, allowing replacement of the caller's whole
-binding. `Self` remains the implemented value type, and `self` retains its storage group.
+An ordinary implicit receiver borrows by default and can replace the caller's whole
+binding with `self = value`. Replacement and escaping borrows retain caller storage;
+replacement requires `reshape self` (inferred when effects are omitted) and
+invalidates overlapping borrows. `Self` remains the implemented
+value type, and `self` retains its storage group.
 Compiler-created closure functions derive group effects from their reference captures.
 Method results may expose `ref[self] T`, including inside `Option`, to borrow from
 the argument passed as `self`. Such results remain tied to that argument's lifetime; reshaping or consuming

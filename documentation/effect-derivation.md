@@ -99,8 +99,8 @@ The type checker tracks an owner group for each relevant local:
 Frame-local effects are implementation details and are filtered from public contracts. This is why
 ordinary mutation of a local record does not force a source annotation.
 
-`self` is accepted as an effect root only for a real instance method—one whose first parameter is
-named `self`:
+`self` is accepted as an effect root only for an instance method, whose receiver is
+implicit. Do not declare `self` in the parameter list:
 
 ```foster
 impl Counter {
@@ -111,7 +111,10 @@ impl Counter {
 }
 ```
 
-A non-method declaration containing `mut self` is rejected.
+A non-method declaration containing `mut self` is rejected. Assigning a new value
+to the whole borrowed receiver (`self = value`) derives `reshape self`, so an
+explicit effect bound must permit reshaping. Ordinary field assignment remains
+mutation of that field.
 
 ## Operations that derive effects
 

@@ -251,17 +251,7 @@ pub(super) fn function_signature(
     let signature = format!(
         "{}{}func {name}{generics}({parameters}) -> {result}{effects}",
         if function.public { "pub " } else { "" },
-        if function.receiver.is_some()
-            && matches!(
-                function
-                    .parameters
-                    .first()
-                    .and_then(|parameter| parameter.ty.as_ref()),
-                Some(crate::ast::TypeExpr::Reference { .. })
-            )
-        {
-            "ref "
-        } else if function.owner.is_some() && function.receiver.is_none() {
+        if function.owner.is_some() && function.receiver.is_none() {
             "static "
         } else {
             ""

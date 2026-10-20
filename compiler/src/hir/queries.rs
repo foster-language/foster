@@ -50,3 +50,96 @@ pub(super) fn expression_uses_local(hir: &PackageHir, expression: ExprId, local:
     super::visit::Visitor::visit_expression(&mut visitor, hir, expression);
     visitor.found
 }
+
+/// Whether a borrowed method needs the caller's whole storage place.
+/// Keep ordinary cursor reshaping distinct from replacing the receiver binding.
+pub(crate) fn receiver_requires_storage(hir: &PackageHir, function: super::FunctionId) -> bool {
+    receiver_storage(hir, function, &mut std::collections::HashSet::new())
+}
+
+fn receiver_storage(
+    hir: &PackageHir,
+    function: super::FunctionId,
+    checked: &mut std::collections::HashSet<super::FunctionId>,
+) -> bool {
+    if !checked.insert(function) {
+        return false;
+    }
+    let definition = &hir.functions[function];
+    let Some(receiver) = definition.receiver else {
+        return false;
+    };
+    let name = &hir.locals[receiver].name;
+    if definition
+        .effects
+        .iter()
+        .any(|effect| effect.kind == ast::EffectKind::Consume && effect.target.root == *name)
+    {
+        return false;
+    }
+    // Compiled interfaces retain the resolved receiver reference. Intrinsic
+    // buffer writes need the allocation place despite having no body.
+    if matches!(
+        definition.parameters.first().and_then(|p| p.ty.as_ref()),
+        Some(ast::TypeExpr::Reference { .. })
+    ) || type_exposes_group(definition.return_type.as_ref(), name)
+        || definition.intrinsic.as_deref() == Some("buffer.write")
+    {
+        return true;
+    }
+    struct Storage<'a> {
+        function: super::FunctionId,
+        receiver: LocalId,
+        found: bool,
+        visited: std::collections::HashSet<ExprId>,
+        checked: &'a mut std::collections::HashSet<super::FunctionId>,
+    }
+    impl super::visit::Visitor for Storage<'_> {
+        fn visit_expression(&mut self, hir: &PackageHir, expression: ExprId) {
+            if self.found || !self.visited.insert(expression) {
+                return;
+            }
+            let is_self = |id| matches!(hir.expressions[id], super::Expr::Name(super::ResolvedName::Local(local)) if local == self.receiver);
+            match &hir.expressions[expression] {
+                super::Expr::Reference(place) if is_self(*place) => self.found = true,
+                super::Expr::Closure { captures, .. } => {
+                    self.found = captures.iter().any(|capture| {
+                        capture.local == self.receiver && capture.mode == super::CaptureMode::Ref
+                    });
+                }
+                super::Expr::Call { callee, .. } => {
+                    if let super::Expr::Member { object, name } = &hir.expressions[*callee]
+                        && is_self(*object)
+                        && let Some(owner) = &hir.functions[self.function].owner
+                    {
+                        self.found = hir
+                            .functions_named(
+                                hir.functions[self.function].module,
+                                &format!("{owner}.{name}"),
+                            )
+                            .iter()
+                            .any(|target| receiver_storage(hir, *target, self.checked));
+                    }
+                }
+                _ => {}
+            }
+            super::visit::walk_expression(self, hir, expression);
+        }
+        fn visit_statement(&mut self, hir: &PackageHir, statement: &super::Stmt) {
+            self.found |=
+                matches!(statement, super::Stmt::Assign { local, .. } if *local == self.receiver);
+            if !self.found {
+                super::visit::walk_statement(self, hir, statement);
+            }
+        }
+    }
+    let mut storage = Storage {
+        function,
+        receiver,
+        found: false,
+        visited: std::collections::HashSet::new(),
+        checked,
+    };
+    super::visit::Visitor::visit_block(&mut storage, hir, &definition.body);
+    storage.found
+}

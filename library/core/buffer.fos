@@ -47,16 +47,16 @@ impl Buffer<T> {
 
     /// Replaces the element at index without allocating or changing length.
     /// Fails unless 0 <= index < length(). Preserves live element and view aliases.
-    pub ref func write(index: Int, value: T) -> () [mut self] = intrinsic("buffer.write")
+    pub func write(index: Int, value: T) -> () [mut self] = intrinsic("buffer.write")
 
     /// Borrows one initialized element; invalid indexes return None.
-    pub ref func borrow(index: Int) -> Option<ref[self] T> {
+    pub func borrow(index: Int) -> Option<ref[self] T> {
         self.storage.borrow(index)
     }
 
     /// Borrows the half-open range [start, end), without copying its elements.
     /// Asserts unless 0 <= start <= end <= length().
-    pub ref func view(start: Int, end: Int) -> BufferView<ref[self] Buffer<T>> {
+    pub func view(start: Int, end: Int) -> BufferView<ref[self] Buffer<T>> {
         assert(start >= 0 && end >= start && end <= self.storage.length, "Buffer view out of bounds")
         BufferView {
             source: ref self, start, count: end - start

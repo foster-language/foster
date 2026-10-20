@@ -520,6 +520,7 @@ pub(super) fn lower_shared_instruction(
                 expected_captures,
                 environment.layouts,
                 values,
+                facts.reference_homes,
                 &mut result,
                 &metadata.name,
             )?;
@@ -566,6 +567,7 @@ pub(super) fn lower_shared_instruction(
                 expected_captures,
                 environment.layouts,
                 values,
+                facts.reference_homes,
                 &mut result,
                 &metadata.name,
             )?;

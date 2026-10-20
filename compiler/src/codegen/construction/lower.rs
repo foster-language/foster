@@ -488,7 +488,9 @@ impl FunctionCompiler<'_> {
                         } else if self.intrinsic(function).and_then(Intrinsic::opcode)
                             == Some(OpcodeIntrinsic::ListClear)
                             || (!remote
-                                && (crate::hir::queries::type_exposes_group(
+                                && (crate::hir::queries::receiver_requires_storage(
+                                    self.hir, function,
+                                ) || crate::hir::queries::type_exposes_group(
                                     self.hir.functions[function].return_type.as_ref(),
                                     "self",
                                 ) || matches!(
@@ -601,7 +603,17 @@ impl FunctionCompiler<'_> {
                     if let Some(crate::types::ResolvedCall::ContractMethod { slot, name, .. }) =
                         self.types.resolved_call(*callee)
                     {
-                        let receiver = self.method_receiver(*object)?;
+                        let consumes_receiver = self.types.expression_type(*callee).is_some_and(|ty| {
+                            matches!(&self.types.types[ty], crate::types::Type::Function(signature)
+                                if signature.effects.iter().any(|effect| effect.kind == crate::ast::EffectKind::Consume && effect.target.root == "self"))
+                        });
+                        let receiver = if consumes_receiver {
+                            self.method_receiver(*object)?
+                        } else {
+                            // An implementation may replace its implicit receiver. Keep the
+                            // caller's place even when the structural view erases its type.
+                            self.reference_expression(*object, span.clone())?
+                        };
                         let arguments = arguments
                             .iter()
                             .map(|argument| self.expression(*argument))

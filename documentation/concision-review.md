@@ -23,7 +23,7 @@ not automatically an obsolete language contract.
 | Record destructuring | The JSON example names successful `token`, `rest`, and `value` fields directly after selected propagation. Ownership still follows field-binding rules. |
 | `panic` and `Never` | Unrecoverable time-zone invariants no longer fabricate offsets, dates, instants, or integers after failing. Explicit failure arms in library tests, tools, and guide examples use `panic(message)`. |
 | String interpolation | The endpoint example and benchmark CSV output use triple-quoted substitutions. Substitutions retain the required conversion imports. |
-| Generic implementations and implicit receivers | Methods omit `self` from parameter lists; associated functions use `static func`, and reference receivers use `ref func`. Specialized receiver types appear in implementation headers. |
+| Generic implementations and implicit receivers | Methods omit `self` from parameter lists; associated functions use `static func`, and ordinary methods support whole-binding replacement. Specialized receiver types appear in implementation headers. |
 | Structural constraints and type branches | The writing guide and `impl_constraints` / `type_branch` fixtures exercise concrete-type-preserving constraints and capability checks. |
 | Named scopes and parameter groups | Ownership examples and the `named_scopes` / `parameter_groups` fixtures exercise lifetime boundaries and returned loans. |
 | Deferred fields | The writing guide and `deferred_initialization` fixture demonstrate `??` with definite initialization. Fully available records do not benefit from artificial deferred construction. |
@@ -39,7 +39,7 @@ not automatically an obsolete language contract.
   its operand; replacing those branches would change the API's ownership contract.
   Error conversion and recovery also require explicit handling.
 - Negative fixtures deliberately contain rejected programs. Syntax, ownership,
-  formatter, and backend tests retain explicit receivers, unconditional assertions,
+  formatter, and backend tests retain rejected receiver syntax, unconditional assertions,
   manual loops, and other forms when those are what the test exercises.
 - Generated Unicode and IANA data remain generator-owned. Update the generator and
   verify its output instead of restyling table literals or changing data provenance.

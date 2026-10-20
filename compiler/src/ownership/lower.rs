@@ -137,7 +137,9 @@ impl<'a> Builder<'a> {
                     span: definition.span.clone(),
                 });
             }
-            if matches!(parameter.ty, Some(crate::ast::TypeExpr::Reference { .. }))
+            if (definition.receiver == Some(parameter.local)
+                && crate::hir::queries::receiver_requires_storage(self.hir, self.function))
+                || matches!(parameter.ty, Some(crate::ast::TypeExpr::Reference { .. }))
                 || (crate::hir::queries::type_exposes_group(
                     definition.return_type.as_ref(),
                     &self.hir.locals[parameter.local].name,

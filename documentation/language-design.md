@@ -671,10 +671,10 @@ results use `ref[self] T`. Lowercase `self` is a value and storage-group name,
 never a type annotation. `Self` is reserved and cannot be declared as a type or
 generic parameter. An associated function uses `static func`, has no receiver,
 and is called through the type. It can return `Self`.
-A `ref func` member has an implicit `self: ref[self] Self` receiver. This preserves
-explicit reference behavior, including replacement of the caller's whole binding.
-`Self` still denotes the implemented value type. A reference receiver cannot be
-combined with `static`.
+Ordinary methods can replace the caller's whole binding with `self = value`.
+The receiver retains caller storage when replacement or a borrowed result requires
+it. Replacement requires `reshape self` (inferred when effects are omitted) and
+invalidates overlapping borrows. No receiver modifier is needed.
 
 ```foster
 pub type Box<T> = { value: T }

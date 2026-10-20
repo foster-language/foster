@@ -13,7 +13,7 @@ impl Box<T> {
     func identity() -> Self [consume self] {
         move self
     }
-    ref func borrow() -> ref[self] Self {
+    func borrow() -> ref[self] Self {
         ref self
     }
 }
@@ -27,7 +27,7 @@ impl Counter {
             value
         }
     }
-    ref func owned() -> Self {
+    func owned() -> Self {
         Counter {
             value: self.value.copy()
         }

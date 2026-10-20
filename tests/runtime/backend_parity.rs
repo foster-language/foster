@@ -3567,3 +3567,12 @@ func main() -> Int {
         "4\n3\n2\n1\n1\n42",
     );
 }
+
+#[test]
+fn implicit_receiver_replacement_preserves_caller_storage() {
+    check(
+        "implicit-receiver-replacement",
+        include_str!("../fixtures/programs/implicit_receiver_replacement.fos"),
+        Ok("42"),
+    );
+}

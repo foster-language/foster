@@ -362,15 +362,11 @@ impl Parser {
                 self.newlines();
                 while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
                     let documentation = self.documentation();
-                    let method_follows = self.at(&TokenKind::Ref)
-                        || self.at(&TokenKind::Static)
+                    let method_follows = self.at(&TokenKind::Static)
                         || self.at(&TokenKind::Func)
                         || (self.at(&TokenKind::Pub)
                             && self.peek_n(1).is_some_and(|token| {
-                                matches!(
-                                    token.kind,
-                                    TokenKind::Func | TokenKind::Static | TokenKind::Ref
-                                )
+                                matches!(token.kind, TokenKind::Func | TokenKind::Static)
                             }));
                     if !method_follows {
                         return Err(
@@ -442,15 +438,11 @@ impl Parser {
         let mut methods = Vec::new();
         while !self.at(&TokenKind::RBrace) && !self.at(&TokenKind::Eof) {
             let documentation = self.documentation();
-            let method_follows = self.at(&TokenKind::Ref)
-                || self.at(&TokenKind::Static)
+            let method_follows = self.at(&TokenKind::Static)
                 || self.at(&TokenKind::Func)
                 || (self.at(&TokenKind::Pub)
                     && self.peek_n(1).is_some_and(|token| {
-                        matches!(
-                            token.kind,
-                            TokenKind::Func | TokenKind::Static | TokenKind::Ref
-                        )
+                        matches!(token.kind, TokenKind::Func | TokenKind::Static)
                     }));
             if method_follows {
                 methods.push(self.method_requirement(documentation)?);
@@ -518,11 +510,7 @@ impl Parser {
     ) -> Result<MethodRequirement, FosterError> {
         let start = self.peek().range.start;
         let public = self.take(&TokenKind::Pub);
-        let borrowed = self.take(&TokenKind::Ref);
         let static_ = self.take(&TokenKind::Static);
-        if borrowed && static_ {
-            return Err(self.error("a static function cannot have a reference receiver"));
-        }
         self.expect(&TokenKind::Func, "expected `func`")?;
         let name = self.expect_ident("expected required method name")?;
         let type_parameters = self.function_parameters()?;
@@ -548,7 +536,7 @@ impl Parser {
         if receiver {
             parameters.insert(
                 0,
-                Self::implicit_self(start, TypeExpr::Named("Self".into(), Vec::new()), borrowed),
+                Self::implicit_self(start, TypeExpr::Named("Self".into(), Vec::new())),
             );
         }
         let return_type = if self.take(&TokenKind::Arrow) {
@@ -724,11 +712,7 @@ impl Parser {
     ) -> Result<Function, FosterError> {
         let start = self.peek().range.start;
         let public = self.take(&TokenKind::Pub);
-        let borrowed = self.take(&TokenKind::Ref);
         let static_ = self.take(&TokenKind::Static);
-        if borrowed && (static_ || impl_owner.is_none()) {
-            return Err(self.error("`ref func` requires an instance method inside an `impl` block"));
-        }
         if static_ && impl_owner.is_none() {
             return Err(self.error("`static func` is only allowed inside an `impl` block"));
         }
@@ -772,7 +756,7 @@ impl Parser {
         if receiver {
             parameters.insert(
                 0,
-                Self::implicit_self(start, TypeExpr::Named("Self".into(), Vec::new()), borrowed),
+                Self::implicit_self(start, TypeExpr::Named("Self".into(), Vec::new())),
             );
             let Some(owner) = impl_owner else {
                 return Err(
@@ -863,18 +847,11 @@ impl Parser {
         Ok(())
     }
 
-    fn implicit_self(start: usize, ty: TypeExpr, borrowed: bool) -> Parameter {
+    fn implicit_self(start: usize, ty: TypeExpr) -> Parameter {
         Parameter {
             span: start..start,
             name: "self".into(),
-            ty: Some(if borrowed {
-                TypeExpr::Reference {
-                    group: "self".into(),
-                    value: Box::new(ty),
-                }
-            } else {
-                ty
-            }),
+            ty: Some(ty),
             type_span: None,
         }
     }

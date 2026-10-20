@@ -38,6 +38,8 @@ fn explicit_receivers_and_module_static_functions_are_rejected() {
         "static func main() {}",
         "pub static func main() {}",
         "ref func main() {}",
+        "type Item = {}\nimpl Item { ref func get() {} }",
+        "type Item = { ref func get() -> Int }",
         "type Item = {}\nimpl Item { ref static func get() {} }",
         "type Item = {}\nimpl Item { static func get() -> Int { self.value } }",
     ] {
@@ -46,11 +48,11 @@ fn explicit_receivers_and_module_static_functions_are_rejected() {
 }
 
 #[test]
-fn reference_receivers_replace_the_callers_binding() {
+fn implicit_receivers_replace_the_callers_binding() {
     let source = r#"
 type Item = { value: Int }
 impl Item {
-    ref func replace(value: Int) -> () [mut self] { self = Item { value } }
+    func replace(value: Int) -> () [reshape self] { self = Item { value } }
 }
 func main() -> Int {
     let item = Item { value: 1 }
@@ -175,4 +177,73 @@ fn formatter_keeps_member_documentation_inside_the_block() {
         parsed.functions[0].documentation.as_deref(),
         Some("Creates a box.")
     );
+}
+
+#[test]
+fn implicit_receiver_replacement_can_infer_effects_and_reach_projected_storage() {
+    let source = include_str!("../fixtures/programs/implicit_receiver_replacement.fos");
+    assert_eq!(foster::run(source).unwrap(), Value::Integer(42));
+}
+
+#[test]
+fn receiver_replacement_invalidates_live_borrows() {
+    let source = r#"
+type Item = { value: Int }
+impl Item {
+    func borrow() -> ref[self] Item { ref self }
+    func replace() -> () [reshape self] { self = Item { value: 42 } }
+}
+func main() -> Int {
+    let item = Item { value: 1 }
+    let borrowed = item.borrow()
+    item.replace()
+    borrowed.value
+}
+"#;
+    assert!(foster::compile(&source.replace("    item.replace()\n", "")).is_ok());
+    assert!(foster::compile(source).is_err());
+}
+
+#[test]
+fn receiver_replacement_requires_a_reshaping_contract() {
+    let source = "type Item = { value: Int }\nimpl Item { func replace() -> () [mut self] { self = Item { value: 42 } } }\nfunc main() -> Int { 42 }";
+    let error = foster::compile(source)
+        .err()
+        .expect("replacement must require reshaping");
+    assert!(error.message.contains("reshape"), "{error}");
+}
+
+#[test]
+fn receiver_replacement_invalidates_borrows_inside_the_method() {
+    let source = r#"
+type Item = { value: Int }
+impl Item {
+    func replace() -> Int [reshape self] {
+        let borrowed = ref self
+        self = Item { value: 42 }
+        borrowed.value
+    }
+}
+func main() -> Int { Item { value: 1 }.replace() }
+"#;
+    assert!(foster::compile(source).is_err());
+}
+
+#[test]
+fn captured_receiver_replacement_requires_a_reshaping_contract() {
+    let source = r#"
+type Item = { value: Int }
+impl Item {
+    func replace() -> () [mut self] {
+        let change = [ref self] () -> { self = Item { value: 42 }
+() }
+        change()
+    }
+}
+func main() -> Int { 42 }
+"#;
+    let error = foster::compile(source)
+        .err()
+        .expect("replacement must require reshaping");
+    assert!(error.message.contains("reshape"), "{error}");
 }

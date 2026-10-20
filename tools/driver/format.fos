@@ -115,7 +115,7 @@ func declaration(line: String) -> String {
 
 func begins_declaration(line: String) -> Bool {
     let text = declaration(line)
-    for prefix in ["import ", "const ", "type ", "enum ", "impl ", "impl<", "func ", "static func ", "ref func ", "test "] {
+    for prefix in ["import ", "const ", "type ", "enum ", "impl ", "impl<", "func ", "static func ", "test "] {
         return true if text.starts_with?(prefix)
     }
     false

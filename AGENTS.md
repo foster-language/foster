@@ -27,7 +27,9 @@ and the standard library are written in `.fos` files.
   Use `static func` inside an `impl` for associated functions without a receiver.
   `Self` is the implemented value type; `self` is the value and storage group.
   Borrowed results use `ref[self] T`; ordinary receivers borrow by default.
-  Use `ref func` for a reference receiver, including whole-binding replacement.
+  Ordinary methods can replace the caller's whole binding with `self = value`;
+  replacement requires `reshape self` (inferred when effects are omitted) and
+  invalidates overlapping borrows.
   Specialized targets use `impl<T> List<List<T>>` or `impl<> List<String>`.
 - Ordinary call arguments borrow by default. Consuming parameters take an existing
   owned binding with `move`. Explicit reference types use groups, not Rust lifetimes.

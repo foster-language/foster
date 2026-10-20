@@ -713,10 +713,14 @@ impl<'a> Checker<'a> {
                 .map(|((ty, parameter), mode)| {
                     let name = &self.hir.locals[parameter.local].name;
                     if *mode == crate::ast::ParameterMode::Borrow
-                        && crate::hir::queries::type_exposes_group(
+                        && (crate::hir::queries::type_exposes_group(
                             function.return_type.as_ref(),
                             name,
-                        )
+                        ) || (function.receiver == Some(parameter.local)
+                            && crate::hir::queries::receiver_requires_storage(
+                                self.hir,
+                                function_id,
+                            )))
                         && !matches!(ty, Ty::Reference(..))
                     {
                         Ty::Reference(name.clone(), Box::new(ty))

@@ -165,8 +165,10 @@ write it in the parameter list. Use `static func` for associated functions calle
 through the type. Put shared generic parameters on the `impl` header. `Self` denotes
 the implemented value type and can also appear in associated-function returns and
 nested results. Use `ref[self] T` for a borrowed result; ordinary receivers already
-borrow by default. Use `ref func` when the method requires an explicit reference
-receiver, including replacing the caller's whole binding. Specialized implementations declare their parameters before the
+borrow by default. Ordinary methods can replace the caller's whole binding with
+`self = value`. Replacement requires `reshape self`, inferred when effects are
+omitted, and invalidates overlapping borrows.
+Specialized implementations declare their parameters before the
 target, such as `impl<T> List<List<T>>` or `impl<> List<String>`. Structural
 contracts match accessible members; there is no nominal `implements` requirement.
 
@@ -183,10 +185,13 @@ impl Counter {
     func increment() -> () [mut self] {
         self.value = self.value + 1
     }
+
+    func reset(value: Int) -> () [reshape self] { self = Counter { value } }
 }
 
 func main() -> Int {
-    let counter = Counter.new(0)
+    let counter = Counter.new(1)
+    counter.reset(0)
     let total = 0
     for item in [10, 20, 30] {
         continue if item == 20

@@ -71,8 +71,9 @@ explicit `self` parameters are rejected. `static func` declares an associated
 function without a receiver. Module functions have no receiver and do not use
 `static`. `Self` denotes the implemented value type, including in associated-function
 returns. Ordinary receivers borrow by default, and borrowed results use `ref[self] T`.
-`ref func` preserves an explicit reference receiver, `self: ref[self] Self`,
-including caller-binding replacement; it cannot be combined with `static`.
+Ordinary methods can replace the caller's whole binding with `self = value`.
+Replacement retains caller storage, requires `reshape self` (inferred when effects
+are omitted), and invalidates overlapping borrows.
 Specialized implementations use explicit generic bindings before the target, as in
 `impl<T> List<List<T>>` or `impl<> List<String>`. Lowercase `self` names a value or
 storage group, never a type. Blocks share the existing member namespace and do

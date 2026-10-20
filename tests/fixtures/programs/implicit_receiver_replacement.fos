@@ -1,0 +1,56 @@
+type Replace = {
+    func replace(value: Int) -> () [reshape self]
+}
+type Item = & Replace & {
+    value: Int
+}
+impl Item {
+    func replace(value: Int) -> () [reshape self] {
+        self = Item {
+            value
+        }
+    }
+    func captured(value: Int) -> () {
+        let change = [ref self, copy value] () -> {
+            self = Item {
+                value
+            }
+            ()
+        }
+        change()
+    }
+    func forwarded(value: Int) -> () {
+        self.inferred(value)
+    }
+    func inferred(value: Bool) -> () {
+        if value {
+            self.value = 10
+        }
+    }
+    func inferred(value: Int) -> () {
+        if value > 0 {
+            self = Item {
+                value
+            }
+        }
+    }
+}
+type Holder = {
+    item: Item
+}
+func update<T & Replace>(item: ref[item] T) -> () {
+    item.replace(42)
+}
+func main() -> Int {
+    let holder = Holder {
+        item: Item {
+            value: 1
+        }
+    }
+    holder.item.forwarded(20)
+    assert(holder.item.value == 20, "forwarded receiver replacement")
+    holder.item.captured(21)
+    assert(holder.item.value == 21, "captured receiver replacement")
+    update(holder.item)
+    holder.item.value
+}

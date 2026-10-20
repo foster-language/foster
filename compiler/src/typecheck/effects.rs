@@ -231,7 +231,22 @@ impl<'a, 'hir> EffectDerivation<'a, 'hir> {
                 hir::Stmt::Assign { local, value } => {
                     self.walk_consumed_expr(*value);
                     self.remember_latent(*local, *value);
-                    self.add(crate::ast::EffectKind::Mut, self.local_group(*local));
+                    let owner = self.checker.hir.locals[*local].function;
+                    let borrowed_receiver = self.checker.hir.functions[owner].receiver
+                        == Some(*local)
+                        && self.checker.functions[&owner].parameters[0].mode
+                            == crate::ast::ParameterMode::Borrow;
+                    let borrowed_receiver = borrowed_receiver
+                        || self.checker.locals.get(local).is_some_and(|ty| {
+                            reference_group(&self.checker.resolved(ty.clone())).as_deref()
+                                == Some("self")
+                        });
+                    let kind = if borrowed_receiver {
+                        crate::ast::EffectKind::Reshape
+                    } else {
+                        crate::ast::EffectKind::Mut
+                    };
+                    self.add(kind, self.local_group(*local));
                 }
                 hir::Stmt::Expr(value) if is_last => {
                     self.walk_consumed_expr(*value);
