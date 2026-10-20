@@ -919,7 +919,7 @@ impl Machine {
                     let index = usize::try_from(index)
                         .map_err(|_| RuntimeError::runtime("reference index is out of bounds"))?;
                     let reference = PlaceHandle::indexed(place(frame, object), index)?;
-                    write(frame, destination, Value::Reference(reference))?;
+                    bind_reference(frame, destination, reference);
                 }
                 &Instruction::MakeWholeReference {
                     destination,
@@ -927,7 +927,7 @@ impl Machine {
                     ..
                 } => {
                     let reference = Slot::place(&place(frame, object));
-                    write(frame, destination, Value::Reference(reference))?;
+                    bind_reference(frame, destination, reference);
                 }
                 Instruction::MakeFieldReference {
                     destination,
@@ -936,7 +936,7 @@ impl Machine {
                     ..
                 } => {
                     let reference = PlaceHandle::field(place(frame, *object), field.clone())?;
-                    write(frame, *destination, Value::Reference(reference))?;
+                    bind_reference(frame, *destination, reference);
                 }
                 &Instruction::MoveOut {
                     by_reference,
@@ -1987,6 +1987,16 @@ fn write(frame: &mut Frame<'_>, register: Register, value: Value) -> Result<(), 
         live[register.0 as usize] = true;
     }
     Ok(())
+}
+
+fn bind_reference(frame: &mut Frame<'_>, register: Register, reference: PlaceHandle) {
+    // Reference-producing instructions define a handle. On a loop backedge the
+    // register can still hold the previous iteration's handle; writing through
+    // it would overwrite the previous pointee instead of rebinding the temporary.
+    frame.registers[register.0 as usize].replace(Value::Reference(reference));
+    if let Some(live) = &mut frame.debug_live {
+        live[register.0 as usize] = true;
+    }
 }
 
 fn place(frame: &mut Frame<'_>, register: Register) -> Rc<Slot> {

@@ -1,0 +1,37 @@
+import core.list.List
+import core.string.String
+
+type Cursor = {
+    source: List<String>
+}
+impl Cursor {
+    func byte_count() -> Int {
+        let index = 0
+        let total = 0
+        while index < self.source.length {
+            total = total + self.source[index].bytes().length
+            index = index + 1
+        }
+        total
+    }
+}
+
+func main() -> Int {
+    let cursor = Cursor {
+        source: ["a", "", "é", "🙂"]
+    }
+    assert(cursor.byte_count() == 7)
+    assert(cursor.source[2] == "é")
+    assert(cursor.source[3].bytes()[3].int == 130)
+    let nested = [["unused"], ["x", "é"]]
+    assert(nested[1][1].bytes().length == 2)
+    let row = 0
+    let total = 0
+    while row < nested.length {
+        total = total + nested[row][0].bytes().length
+        row = row + 1
+    }
+    assert(total == 7)
+    assert(nested[0][0] == "unused" && nested[1][0] == "x")
+    42
+}

@@ -2339,7 +2339,7 @@ fn nested_remote_awaits_preserve_native_frames_and_owned_values() {
 #[test]
 fn verifier_rejects_inconsistent_specialized_call_results() {
     for source in [
-        "type Echo<T> = { value: T }\nimpl Echo {\n    func get<T>() -> T { self.value }\n}\nfunc main() -> Bool { Echo { value: true }.get() }",
+        "type Echo<T> = { value: T }\nimpl Echo<T> {\n    func get() -> T { self.value }\n}\nfunc main() -> Bool { Echo { value: true }.get() }",
         "func identity<T>(value: T) -> T { value }\nfunc main() -> Bool { identity(true) }",
     ] {
         let compilation = foster::compile(source).unwrap();

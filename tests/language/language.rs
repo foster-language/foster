@@ -1,5 +1,30 @@
 use foster::vm::Value;
 
+#[test]
+fn indexed_string_bytes_preserve_projection_origins() {
+    let compilation = foster::compile(include_str!(
+        "../fixtures/programs/indexed_string_bytes.fos"
+    ))
+    .unwrap();
+    for optimize in [false, true] {
+        let program =
+            foster::vm::compile_with_options(&compilation, foster::vm::CompileOptions { optimize })
+                .unwrap();
+        let encoded = foster::vm::encode_program(&program).unwrap();
+        let decoded = foster::vm::decode_program(&encoded)
+            .unwrap()
+            .into_verified()
+            .unwrap();
+        assert_eq!(
+            foster::vm::Machine::new(&decoded)
+                .run_main()
+                .unwrap()
+                .to_string(),
+            "42"
+        );
+    }
+}
+
 fn assert_string(value: Value, expected: &str) {
     assert_eq!(value.as_string(), Some(expected));
 }

@@ -39,8 +39,8 @@ impl Statistics {
 
     func record_result(result: ParseResult<Json>) -> Int {
         branch result {
-            ParseOk(_) -> self.record_success()
-            ParseError(_) -> self.record_failure()
+            ParseResult.ParseOk(_) -> self.record_success()
+            ParseResult.ParseError(_) -> self.record_failure()
         }
     }
 
