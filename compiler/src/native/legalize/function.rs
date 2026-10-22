@@ -8,15 +8,12 @@ use crate::native::{
 use super::conversions::{ReturnConversion, allocate_shared_value};
 use super::edges::{adapt_arguments, record_cleanup};
 use super::instructions::{NativeFunctionFacts, lower_shared_instruction};
-pub(in crate::native) fn lower_shared_to_native_ir(
+pub(in crate::native) fn inference_body(
     shared: &ir::Function,
-    metadata: &FunctionDeclaration,
     source_states: &crate::codegen::flow::FunctionFacts,
-    function_signature: &ir::Signature,
     instance: &SpecializationKey,
     environment: NativeIrEnvironment<'_>,
-) -> Result<(ir::Function, FailureCleanup), FosterError> {
-    let remote_calls = verified_remote_calls(shared, source_states, instance, environment)?;
+) -> ir::Function {
     let mut reachable_shared = shared.clone();
     for (index, block) in reachable_shared.blocks.iter_mut().enumerate() {
         let reachable_len = (0..block.instructions.len())
@@ -40,7 +37,19 @@ pub(in crate::native) fn lower_shared_to_native_ir(
             block.terminator = ir::Terminator::Unreachable;
         }
     }
-    let specialized = specialize_type_branches(&reachable_shared, instance, environment);
+    specialize_type_branches(&reachable_shared, instance, environment)
+}
+
+pub(in crate::native) fn lower_shared_to_native_ir(
+    shared: &ir::Function,
+    metadata: &FunctionDeclaration,
+    source_states: &crate::codegen::flow::FunctionFacts,
+    function_signature: &ir::Signature,
+    instance: &SpecializationKey,
+    environment: NativeIrEnvironment<'_>,
+) -> Result<(ir::Function, FailureCleanup), FosterError> {
+    let remote_calls = verified_remote_calls(shared, source_states, instance, environment)?;
+    let specialized = inference_body(shared, source_states, instance, environment);
     let shared = &specialized;
     let external_values = shared
         .captures

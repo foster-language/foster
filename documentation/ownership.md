@@ -239,6 +239,10 @@ storage layout. A parameter such as `item: ref[item] Replace` validates the
 argument against `Replace` and preserves its original place. The body uses the
 contract's guaranteed operations; specialization keeps the argument's layout
 without copying it or borrowing a converted temporary.
+The same rule applies to borrowed return contracts. A conforming returned item
+keeps its original storage; the result annotation restricts accessible operations
+and its group restricts provenance. That group need not contain only values with
+the input's shape: a reference to a child can use its parent's incoming group.
 The inferred `mut person.name` effect says the body may replace that field. A mutable reference
 parameter remains connected to the caller's place, so `rename(ref person, "new name")` updates the
 caller's `person.name`; it does not detach a callee-local copy. Group names are part of the function contract:

@@ -30,6 +30,8 @@ pub(super) fn representation_operand(instruction: &Instruction) -> Option<ir::Va
         } => Some(*left),
         Instruction::CallValue { callee, .. } => Some(*callee),
         Instruction::LoadField { object, .. }
+        | Instruction::MakeWholeReference { object, .. }
+        | Instruction::MakeFieldReference { object, .. }
         | Instruction::Index { object, .. }
         | Instruction::Append { object, .. } => Some(*object),
         Instruction::SpawnRemote { value, .. } => Some(*value),
@@ -47,8 +49,6 @@ pub(super) fn representation_operand(instruction: &Instruction) -> Option<ir::Va
         | Instruction::MakeRecord { .. }
         | Instruction::MakeVariant { .. }
         | Instruction::MakeReference { .. }
-        | Instruction::MakeWholeReference { .. }
-        | Instruction::MakeFieldReference { .. }
         | Instruction::Push { .. }
         | Instruction::Contains { .. }
         | Instruction::Builtin { .. }
@@ -368,22 +368,48 @@ pub(super) fn infer_instruction(
             destination,
             pointee_type,
             ..
-        }
-        | Instruction::MakeWholeReference {
-            destination,
-            pointee_type,
-            ..
-        }
-        | Instruction::MakeFieldReference {
-            destination,
-            pointee_type,
-            ..
         } => {
             let pointee = pointee_type.specialize(&instance.substitutions);
             let layout = environment
                 .layouts
                 .pointer(&pointee, crate::codegen::layout::Ownership::Borrowed)
                 .ok_or_else(|| native_error("reference has no concrete native layout"))?;
+            result[destination.index()] = Some(NativeType::Object(layout));
+        }
+        Instruction::MakeWholeReference {
+            destination,
+            object,
+            ..
+        } => {
+            let value = value_type(result, *object, function)?;
+            let pointee = dereference_native_type(value, environment)?;
+            let pointee =
+                executable_type_for_native(pointee, environment.program, environment.layouts);
+            let layout = environment
+                .layouts
+                .pointer(&pointee, crate::codegen::layout::Ownership::Borrowed)
+                .ok_or_else(|| native_error("retained reference has no native layout"))?;
+            result[destination.index()] = Some(NativeType::Object(layout));
+        }
+        Instruction::MakeFieldReference {
+            destination,
+            object,
+            field,
+            ..
+        } => {
+            let pointee = field_type(
+                &environment.program.metadata,
+                environment.layouts,
+                environment.physical_layouts,
+                value_type(result, *object, function)?,
+                field,
+            )?;
+            let pointee =
+                executable_type_for_native(pointee, environment.program, environment.layouts);
+            let layout = environment
+                .layouts
+                .pointer(&pointee, crate::codegen::layout::Ownership::Borrowed)
+                .ok_or_else(|| native_error("retained field reference has no native layout"))?;
             result[destination.index()] = Some(NativeType::Object(layout));
         }
         Instruction::MoveOut {
@@ -487,6 +513,7 @@ pub(super) fn infer_instruction(
             receiver,
             slot,
             result_type,
+            arguments,
             ..
         } => {
             let receiver = value_type(result, *receiver, function)?;
@@ -499,6 +526,28 @@ pub(super) fn infer_instruction(
                 return Ok(());
             }
             let concrete = result_type.specialize(&instance.substitutions);
+            if matches!(concrete, ExecutableType::Reference(_))
+                && let Some(arguments) = arguments
+                    .iter()
+                    .map(|argument| result[argument.index()])
+                    .collect::<Option<Vec<_>>>()
+            {
+                let candidates = crate::native::contract_candidates(
+                    *slot,
+                    dereference_native_type(receiver, environment)?,
+                    &arguments,
+                    environment,
+                )?;
+                if let Some(first) = candidates.first() {
+                    let retained = environment.function_types[&first.function].result;
+                    if candidates.iter().all(|candidate| {
+                        environment.function_types[&candidate.function].result == retained
+                    }) {
+                        result[destination.index()] = Some(retained);
+                        return Ok(());
+                    }
+                }
+            }
             result[destination.index()] = Some(native_verification_type(
                 &environment.program.metadata,
                 environment.layouts,

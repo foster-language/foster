@@ -104,8 +104,8 @@ fn prepare_shared(
         .then(|| compilation.shared_program(true))
         .transpose()?;
     let shared = optimized_shared.as_deref().unwrap_or(canonical.as_ref());
-    let program = shared.program.clone();
-    let facts = &shared.facts;
+    let (program, retained_facts) = reference_results::retained_reference_flow(shared)?;
+    let facts = &retained_facts;
     let mut layouts =
         crate::compiler::profile::measure("native.clone_layouts", || shared.layouts.clone());
     if let Some(record) = program.metadata.string_record {
@@ -183,6 +183,7 @@ fn prepare_shared(
         runtime_literal_indices,
         functions: Vec::new(),
     };
+    prepared.resolve_reference_results(facts)?;
     for instance in &prepared.instances {
         let source = &prepared.program.functions[&instance.key.function];
         let source_states = &facts[&instance.key.function];

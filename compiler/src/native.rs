@@ -88,6 +88,7 @@ use remote::{
     lower_native_await, lower_native_remote_call, lower_native_spawn_remote,
     lower_result_error_conversion,
 };
+mod reference_results;
 mod representation;
 use representation::{
     concrete_native_type, instruction_layout_type, native_builtin_result_types, native_type,

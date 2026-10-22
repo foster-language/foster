@@ -368,6 +368,12 @@ body; conformance is checked at calls. Passing the reference must not copy the
 value into a temporary with the contract's declared layout. Independent parameters
 may refer to different layouts satisfying the same contract.
 
+Return annotations validate conformance without choosing the returned reference's
+storage layout. A conforming result keeps its original place and provenance;
+the caller sees the operations guaranteed by the declared return contract.
+Storage groups constrain origins independently of the referenced value's shape.
+Default implementations do not change these input or output obligations.
+
 Borrower provenance must survive aggregates, indexing, pattern extraction, branches, closure
 capture, generic substitution, and structural or callable adaptation. Returning a borrower must
 expose its dependence on input groups. A borrower of frame-local storage cannot escape its frame.
@@ -562,12 +568,6 @@ Remaining work is organized in the [roadmap](roadmap.md). The main semantic limi
   callable relationships are not proved. See [analysis precision](analysis-precision.md).
 - Generic sequence head/rest adapters can copy tails; structural conformance and slicing do not
   promise zero-copy traversal.
-- An ordinary contract-typed parameter whose result exposes its storage group can
-  still require native argument adaptation that is not available for every layout,
-  for example when an enum is passed to such a helper. Explicit structural reference
-  parameters preserve argument layouts through specialization. Calls through an
-  already established contract view and reference-returning enum methods do not
-  require that ordinary-argument conversion.
 
 Resolving an open decision requires a documented rule, implementation, and conformance tests.
 Fixing an implementation violation should restore the contract without redefining the violating

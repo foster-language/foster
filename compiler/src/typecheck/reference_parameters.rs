@@ -1,4 +1,4 @@
-//! Preserve incoming storage layouts for explicitly borrowed structural contracts.
+//! Preserve incoming storage layouts for borrowed structural contracts.
 use super::*;
 use crate::ast;
 
@@ -12,36 +12,39 @@ pub(super) fn lower(hir: &mut hir::PackageHir) -> Result<(), FosterError> {
                 if function.receiver == Some(parameter.local) {
                     continue;
                 }
-                let Some(ast::TypeExpr::Reference { value, .. }) = &parameter.ty else {
+                let Some(annotation) = &parameter.ty else {
                     continue;
                 };
-                let Ty::Reference(_, pointee) =
+                let Ty::Reference(group, pointee) =
                     checker.functions[&function_id].parameters[index].ty.clone()
                 else {
-                    unreachable!()
+                    continue;
                 };
                 if checker.reference_parameter_contract(&pointee)? {
+                    let requirement = match annotation {
+                        ast::TypeExpr::Reference { value, .. } => value.as_ref().clone(),
+                        annotation => annotation.clone(),
+                    };
                     let name = format!(
                         "$reference:{}:{}:{}:{index}",
                         hir.modules[function.module].name, function.name, function.span.start
                     );
-                    plans.push((function_id, index, name, value.as_ref().clone()));
+                    plans.push((function_id, index, name, group, requirement));
                 }
             }
         }
     }
-    for (function_id, index, name, requirement) in plans {
+    for (function_id, index, name, group, requirement) in plans {
         let function = &mut hir.functions[function_id];
         function.type_parameters.push(name.clone());
         function.constraints.push(ast::TypeConstraint {
             parameter: name.clone(),
             requirement,
         });
-        let Some(ast::TypeExpr::Reference { value, .. }) = &mut function.parameters[index].ty
-        else {
-            unreachable!()
-        };
-        **value = ast::TypeExpr::Named(name, vec![]);
+        function.parameters[index].ty = Some(ast::TypeExpr::Reference {
+            group,
+            value: Box::new(ast::TypeExpr::Named(name, vec![])),
+        });
     }
     // Closure lowering precedes this pass; captures inherit the enclosing bounds.
     let mut closures = hir
@@ -77,15 +80,7 @@ impl Checker<'_> {
             Ty::Intersection(_) => Ok(true),
             Ty::Record(record, arguments) => {
                 let definition = &self.hir.records[*record];
-                if definition.intrinsic
-                    || definition.fields.iter().any(|field| !field.public)
-                    || self.hir.functions.iter().any(|(id, method)| {
-                        method.receiver.is_some()
-                            && method.module == definition.module
-                            && method.owner.as_deref() == Some(definition.name.as_str())
-                            && !self.hir.composition_owners.contains_key(&id)
-                    })
-                {
+                if definition.intrinsic || definition.fields.iter().any(|field| !field.public) {
                     return Ok(false);
                 }
                 Ok(self

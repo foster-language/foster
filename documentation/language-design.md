@@ -1431,6 +1431,13 @@ methods, and effects. The call does not convert the item's layout to that of the
 declaration. Compiler specialization retains the argument's storage layout;
 different parameters may receive different layouts satisfying the same contract.
 
+Return annotations impose the same structural conformance obligation. A returned
+reference preserves the referenced item's storage and layout while exposing the
+declared result contract to the caller. A result group describes its storage
+origins, not an equality between the shapes of the input and output. Providing
+a default implementation does not change a contract reference's representation
+obligations.
+
 Lexical scopes define groups for local storage. A function signature names incoming groups
 using its parameter names. For example, a parameter `people: List<Person>` can supply a result
 of type `Option<ref[people] Person>`. There are no separate group-parameter declarations.

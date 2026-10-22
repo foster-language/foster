@@ -3596,6 +3596,57 @@ fn structural_reference_parameters_preserve_field_layouts() {
 }
 
 #[test]
+fn contract_reference_results_preserve_returned_storage() {
+    check(
+        "contract-reference-results",
+        include_str!("../fixtures/programs/contract_reference_results.fos"),
+        Ok("42"),
+    );
+}
+
+#[test]
+fn compiled_contract_reference_results_preserve_returned_storage() {
+    let source = include_str!("../fixtures/programs/contract_reference_results.fos");
+    let mut package =
+        foster::package::Package::from_program_with_core("main", foster::parse(source).unwrap())
+            .unwrap();
+    package
+        .symbol_modules
+        .insert("main".into(), ("contracts".into(), "main".into()));
+    let producer = foster::compiler::check(package).unwrap();
+    let bytes = foster::library::encode(&foster::library::build(&producer).unwrap()).unwrap();
+    let scratch = Scratch::new("compiled-contract-reference-results");
+    std::fs::create_dir_all(scratch.0.join("src")).unwrap();
+    std::fs::write(scratch.0.join("contracts.flib"), bytes).unwrap();
+    std::fs::write(scratch.0.join("foster.toml"), "[package]\nname = 'result_consumer'\n[dependencies]\ncontracts = { path = 'contracts.flib' }\n").unwrap();
+    std::fs::write(
+        scratch.0.join("src/main.fos"),
+        r#"
+import contracts.Value
+import static contracts.forwarded
+type Actual = & Value & { pub extra: String }
+func bump(item: ref[item] Value) -> () { item.value = item.value + 2 }
+func main() -> Int {
+    let item = Actual { extra: "preserved", value: 40 }
+    let answer = forwarded(item)
+    bump(answer)
+    assert(answer.read() == 42)
+    assert(item.extra == "preserved")
+    item.value
+}
+"#,
+    )
+    .unwrap();
+    let project = foster::project::Project::load(&scratch.0).unwrap();
+    let compilation = foster::check_project(&project).unwrap();
+    check_compilation(
+        "compiled-contract-reference-result-consumer",
+        &compilation,
+        Ok("42"),
+    );
+}
+
+#[test]
 fn compiled_contract_reference_parameters_preserve_argument_storage() {
     let source = include_str!("../fixtures/programs/contract_reference_parameters.fos")
         .replace("type Replace =", "pub type Replace =")

@@ -29,6 +29,8 @@ and the standard library are written in `.fos` files.
   Borrowed results use `ref[self] T`; ordinary receivers borrow by default.
   Explicit reference parameters can name structural contracts, for example
   `item: ref[item] Replace`; the argument keeps its original storage layout.
+  Borrowed return annotations are contracts too: the returned item keeps its
+  original storage, and its group describes provenance rather than its shape.
   Ordinary methods can replace the caller's whole binding with `self = value`;
   replacement requires `reshape self` (inferred when effects are omitted) and
   invalidates overlapping borrows.

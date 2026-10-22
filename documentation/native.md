@@ -139,6 +139,8 @@ use the target pointer type. It supports:
   this conversion is bounded and excludes containers with custom destructors or borrowed fields;
 - whole, indexed, and field references lowered as typed addresses, including typed reference
   parameters, load/store, move-out, and mutation observed through a closure capture;
+- reference results retain their verified storage layouts through forwarding and specialization;
+  their source annotations validate contracts and provenance without selecting a replacement layout;
 - descriptor-addressed allocation, strong retain/release, ownership transfer at calls and returns,
   and generated tag-aware recursive destructors;
 - assertions, guarded returns, `loop`, guarded `break`/`continue`, jumps, conditional control

@@ -61,6 +61,26 @@ Fields in the contract can be updated individually. Replacing the entire item
 requires an operation supplied by its contract, since the caller may have
 additional fields that the helper cannot construct.
 
+A return annotation is also a contract: the returned item must satisfy its
+declared fields, methods, and effects. A borrowed result keeps the original
+item's storage and layout. Callers can use the declared return contract; extra
+fields do not become accessible through that annotation. Its group describes
+where the reference can originate, and does not require the input and output to
+have the same shape. Default implementations do not change these obligations.
+
+```foster
+type Value = { pub value: Int }
+type Item = { pub extra: Int, pub value: Int }
+func borrowed(item: ref[item] Value) -> ref[item] Value { ref item }
+func main() -> Int {
+    let item = Item { extra: 9, value: 40 }
+    let result = borrowed(item)
+    result.value = result.value + 2
+    assert(item.extra == 9)
+    item.value
+}
+```
+
 ## Record destructuring
 
 Select fields by name, use `field: local` to rename a binding, and omit fields you
