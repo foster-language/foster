@@ -560,155 +560,44 @@ program outside the implemented model. The current status is:
 | 12 | Partial | Loans remain governed by task ownership and effects; crossing-task storage and exclusivity still require a complete specification. |
 | 15 | Unsupported as a general boundary | Host and foreign interfaces must not retain references until retention contracts are implemented. |
 
-A `try` expression consumes its enum operand and introduces success and return control-flow edges.
-Plain `try` selects `Result.Ok`; `try<Case>` selects the named case. The selected edge continues
-with its payload (or unit). Each propagated edge performs the same
-scope destruction and loan termination as an explicit return before returning the propagated case from the
-enclosing function.
-
-Normative reborrow behavior is therefore fixed: loan issuance records all reaching source loans as
-parents; backward demand for a child also demands its complete parent chain; destructive access to
-the source is rejected while that demand is live; and ordinary parent reads remain legal. This is
-an internal region relationship and adds no source-level lifetime syntax.
-
-Result provenance stored on ownership MIR is inferred from every reachable return point after
-forward provenance is known. Inference follows each returned loan's complete reborrow ancestry back
-to receiver and parameter roots. The inferred summary is validated against the declared result
-groups; declarations may conservatively expose more origins, but may never omit an origin actually
-returned. Direct calls substitute these summaries at their arguments. Indirect calls use callable summaries carried through ownership MIR, falling back to checked
-result types and reference groups when the target is unknown. Results proven recursively free of
-borrowers do not inherit input loans. Borrow-containing results retain their possible parameter
-origins and captured environment; unknown relationships remain conservative. See
-[Supported callable forms](analysis-precision.md#1-precise-results-through-indirect-callables).
-
-An `await` parks the complete invocation frame without relocating its storage. Loans into named
-frame locals and borrowed parameters may cross suspension when ordinary region analysis proves
-them required afterward; the caller invocation remains active for borrowed parameters. Cancellation
-destroys the parked frame and does not resume it, so no post-cancellation loan use exists. Borrowed
-values still cannot cross remote or task-message boundaries. Ownership MIR emits `Destroy`
-operations for named bindings in reverse declaration order on every ordinary function exit.
-Borrower escape is checked before destruction, and a destruction conflicts with any loan demanded
-after it. Runtime last-use drops may occur earlier only when observably equivalent. Ownership MIR
-gives borrowed non-place expressions explicit temporary roots. A binding initializer, assignment,
-expression statement, assertion, or unguarded transfer establishes the outer full-expression
-boundary; nested call operands, aggregate elements, indexing, and branch evaluation share it. A
-postfix transfer guard has its own boundary. Temporary roots are initialized when materialized and
-destroyed in reverse creation order at the boundary; return, `try`, `break`, and `continue` edges
-destroy any active expression temporaries before transferring control. Transferring an owned result
-into a destination does not transfer a borrow of a temporary origin, so a later use of that borrower
-is rejected.
-
-Aggregate construction stores provenance at the corresponding field or constant-index projection
-instead of flattening it onto the whole destination. A non-copy branch result is materialized into
-one expression temporary and every reaching arm stores its provenance there. Pattern bindings copy
-the matched subject's provenance; enum payload bindings use the corresponding payload projection.
-This preserves loans through nested records, lists, branches, and enum extraction while still
-allowing operations on provably disjoint aggregate components.
-
-Boolean, enum-pattern, and normalized comparison branch edges retain facts about directly tested
-stable places. Forward reachability and backward loan demand carry up to sixteen alternative fact
-sets, allowing a later branch on the same unchanged predicate to remain correlated with an earlier
-branch. Variant facts record that one case excludes every distinct case. Equality and ordering facts
-can also prove that two stable dynamic-index operands differ. A write, move, destruction, or effect
-that overlaps a fact operand forgets the fact. Unsupported predicates and excess alternatives widen
-to the ordinary conservative union.
-
-Assertions, checked integer arithmetic and negation, byte shifts, indexed reads/writes/moves/borrows,
-abrupt host operations, and synchronous calls have explicit success and failure successors in
-ownership MIR. `Checked` identifies arithmetic, bounds, host, and call failures and carries the
-source span. Floating-point arithmetic, comparisons, and non-shift bitwise operations do not add
-arithmetic failure edges. Its failure block destroys active expression temporaries
-followed by owned function storage and terminates with `Fail`; only its success block can initialize
-the result. Consumed arguments and temporary receivers remain caller-owned while later arguments
-are evaluated, and transfer at invocation. Ordinary host `Result.Error` values follow normal result
-handling; remote execution failures are delivered through futures. Consumed
-parameters participate in function cleanup, while borrowed parameters do not invalidate their
-caller's storage. At runtime, failure unwinds invocation frames from callee to caller and detaches
-each frame's registers in reverse allocation order. This deterministic frame teardown applies to
-all VM errors even where ownership MIR does not yet carry an explicit exceptional successor.
-
-Native preparation retains live ownership at each instruction, including ABI argument copies and
-conversions. Generated failure paths release those values using the ordinary layout destructors,
-then return through callers that perform their own cleanup. A call's transferred arguments belong
-to its callee; borrowed addresses never release caller-owned pointees. This applies to checked
-arithmetic, bounds checks, assertions, host-response failures, and nested invocation failures on
-both main and remote threads. Opaque host response buffers are released before frame-owned values.
-
 ## Compiler implementation
 
-The relevant compilation order is:
+Types, effects, parameter modes, and captures settle before region checking.
+`compiler/src/ownership/` lowers canonical places into MIR with distinct loan
+identities, borrower stores, explicit invalidations, and cleanup edges.
 
-```text
-AST
-  → lower to resolved HIR
-  → infer effects for reference captures
-  → validate parameter-based group contracts and effect declarations
-  → infer types and derive body effects using inferred closure capture modes
-  → commit validated closure capture modes
-  → lower canonical places into ownership MIR
-  → infer and substitute direct-call result provenance to a fixed point
-  → run control-flow initialization, move, provenance, required-loan, escape, and invalidation analysis
-```
+Forward dataflow tracks possible loan contents; backward dataflow finds required
+uses and demands every reborrow ancestor. Direct-call result summaries converge
+to a fixed point. Indirect calls use known callable targets or fall back to the
+declared reference groups. Returned references retain the argument's existing
+provenance; temporary storage holding a reference is not an additional owner.
+Borrowing an actual temporary owner still ends at that owner's destruction.
 
-The implementation is divided by responsibility:
+Aggregate stores retain field and constant-index projections. Branch and pattern
+bindings carry their source provenance. Supported branch facts can establish
+disjoint paths or indices; mutations discard overlapping facts. See
+[analysis precision](analysis-precision.md) for the supported forms and bounds.
 
-- `compiler/src/block.rs` couples statements to source spans so AST and HIR passes cannot desynchronize
-  parallel body and location vectors.
-- `compiler/src/hir/visit.rs` is the policy-free recursive HIR traversal used by queries and capture-effect
-  analysis; path-sensitive passes layer their own state on top of the same node coverage.
-- `compiler/src/control_flow.rs` owns reachability-aware branch-arm summaries and the semantic branch/loop
-  CFG consumed by both ownership-MIR and bytecode lowering. Branch tests retain source order, and
-  matched arms complete the branch without falling through to later tests.
-- `compiler/src/hir/lower/` resolves names and converts source references, moves, captures, and places into
-  stable HIR IDs.
-- `compiler/src/semantics.rs` is the authoritative place/value and resolved-member classifier shared by
-  type checking, effect inference, ownership lowering, and bytecode lowering.
-- `compiler/src/typecheck/effects.rs` derives group access, consume, and suspension requirements,
-  classifying pending captures from inferred local types during convergence.
-- `compiler/src/hir/ownership.rs` validates groups, resolves capture modes, and rejects use after a closure
-  capture moved its source.
-- `compiler/src/hir/queries.rs` contains policy-free structural queries that do not require resolved types.
-- `compiler/src/ownership/` lowers typed HIR to ownership MIR basic blocks containing explicit
-  read/copy/move/borrow/initialize operations, validates consuming call contracts, then checks
-  initialization and partial-move state at control-flow joins. Ownership MIR also carries stable
-  loan identities, borrower stores, typed invalidations, writes, and suspension points. Its region
-  pass computes forward reaching provenance and backward required-loan sets at every MIR point,
-  then diagnoses a reshape or consume that overlaps a loan required later on the same CFG path.
-  The same pass validates returned borrower escape and self-origin storage. Typed effect-to-place
-  substitution is shared by MIR lowering and effect validation; there is no separate HIR temporal
-  loan checker.
-- `vm/src/value.rs` implements slots and the common weak `PlaceHandle` used by projected references
-  and borrowed captures.
-- `vm/src/runtime.rs` and VM capture instructions represent copied/moved values and borrowed places.
+Each full expression owns its temporaries. Nested operands share that boundary;
+a postfix transfer guard has its own. Temporaries are destroyed in reverse
+creation order. Return, `try`, loop transfers, and labelled exits clean up active
+temporaries and exited scopes. Consumed arguments transfer at invocation, after
+later arguments have evaluated successfully. Failure edges destroy caller-owned
+temporaries and locals; ordinary `Result.Error` values follow normal control flow.
 
-HIR uses resolved `LocalId` and `ExprId` identities, so ownership checks do not compare source names.
-Canonical places contain a root local plus field, index, or dereference projections. Ownership MIR
-uses those places to distinguish whole-value moves from partial moves of disjoint fields. Loans and
-aggregate provenance retain those complete places. Effect targets are substituted onto call-site
-receiver and argument places, and invalidation uses field-sensitive projection overlap.
-Integer-literal indices are also disjoint when their values differ. Dynamic indices are disjoint
-under a live equality or ordering fact that proves their stable operands unequal and conservatively
-overlap otherwise. The rule-indexed corpus, executable reference model, differential checks,
-mutation requirements, and bounded fuzzing policy are specified in
-``.
+`await` parks a frame without relocating its storage. Loans can cross suspension
+when their origins remain live and stable. Cancellation destroys the frame and
+does not resume it. Remote message restrictions still apply.
 
-At runtime, VM references retain a field/index projection path and the origin's structural
-generation but only a weak connection to the root slot. Projection through another reference is
-flattened onto the same root. A reshape increments that generation, and dereferencing an older
-reference fails.
-Returning a reference transfers that same place handle to the caller; it does not read or snapshot
-the referenced value. Ordinary owned returns continue to transfer values. Consequently, returned
-references observe their live origin and remain subject to its lifetime and structural generation.
-An expired weak place also fails safely. These are defensive runtime backstops; well-typed programs
-should be rejected statically before reaching either condition.
+VM references hold a projection path, structural generation, and weak root-slot
+connection. Nested projections flatten to the same origin. Expired or reshaped
+storage fails defensively at runtime; static checks should reject such uses first.
+Native references retain caller storage and follow the same source contract.
+Backend cleanup details live in [VM](vm.md) and [native compilation](native.md).
 
-Mutable binary construction follows the same rules. `buffer.snapshot()` borrows a `ByteBuffer` and
-copies its current contents into immutable `Bytes`. `ByteBuffer.freeze` consumes the buffer, written
-as `(move buffer).freeze()`, and packs its list-backed contents into `Bytes`; allocation transfer
-without copying is not guaranteed. `push` and `extend` reshape the list storage, while `clear` and
-`truncate` replace that storage. These operations invalidate overlapping indexed loans. `reserve`
-currently only checks an allocation hint and does not reshape storage. Replacing an existing byte
-through an indexed mutable loan does not change the buffer's shape.
+See [ownership verification](ownership-verification.md) for rule witnesses,
+reference-model checks, and bounded fuzzing, and [diagnostics](diagnostics.md)
+for error codes.
 
 ## Diagnostics
 
@@ -730,67 +619,16 @@ Effect over-declaration is safe and therefore uses the compiler's warning channe
 
 ## Current limitations and evolution
 
-The implemented model is useful but is not yet a general Rust-equivalent borrow checker:
-
-- Move, initialization, provenance, and required-loan analysis are control-flow-aware. Stable
-  boolean-place, enum-discriminant, and direct scalar comparisons remain correlated across separate
-  branches with bounded widening. `&&`, `||`, and `not` combine supported facts while preserving
-  short-circuit effects. Saved pure Boolean conditions over locals preserve these correlations
-  within a bounded initializer size. A saved Boolean remains a snapshot when its inputs change;
-  writes and calls discard affected facts, including alias origins, rather than changing that value.
-  Integer comparisons also correlate structurally identical, bounded expressions built from
-  addition, subtraction, and multiplication over stable places and integer literals. Saved
-  integer comparisons retain the same facts, including stored-field dependencies. Changing any
-  input through assignment, aliases, or effects discards the affected comparison facts; the saved
-  Boolean itself remains a snapshot. Checked arithmetic still executes and can fail normally.
-  There is no algebraic rewriting: `a + 1` and `1 + a` are different expressions for this analysis.
-  Other computed values, dynamic indices, calls, and expressions beyond the analysis budget
-  remain conservative.
-- Ownership and loan places model field, index, and dereference projections. Different named fields
-  and different constant indices are disjoint. Stable dynamic indices are disjoint while a live
-  comparison proves them unequal and conservatively overlap otherwise.
-- Provenance flows through the implemented aggregate and closure expressions. Direct calls
-  substitute the callee's inferred result provenance at matching receiver and argument places;
-  summaries are propagated to a fixed point across chains of direct calls. Indirect calls preserve
-  sets of up to eight known targets through moves, fixed aggregate storage, and joins, combining
-  every target's result-parameter dependencies. Runtime indexing into a list with entirely known
-  callable elements uses the union for all possible elements. Writes to the list invalidate that
-  summary; effectful calls and alias writes retain conservative invalidation. Unknown elements,
-  unknown predecessors, and larger target sets fall back to checked result-type and group contracts.
-  Captured loans remain dependencies independently of the target's argument summary. Incoming
-  parameters that can contain borrowers carry symbolic contents dependencies, including generic
-  and aggregate parameters: factories can forward them through
-  returned closures, nested closures, and result records without retaining discarded callable
-  arguments. These dependencies propagate through direct-call summaries and compiled-library
-  metadata. Borrowing the factory's local callable slot remains distinct from forwarding its
-  contents and cannot escape. Callers substitute actual loans and enforce their lifetime;
-  symbolic contents do not create additional local lifetime requirements inside the factory.
-  Known callable targets returned by source factories propagate through direct-call chains;
-  every returned target must be known and the set must fit the existing eight-target limit.
-  Unknown factory parameters and opaque external factory targets still use conservative contracts.
-  Inferred and declared reshape effects on indirect calls invalidate captured origins;
-  reshaping through a reference alias also checks the possible underlying origins.
-- Implicit copy behavior is a built-in classification. The structural `Copy` capability supports
-  explicit user-defined copying without changing assignment or capture semantics.
-- Runtime values still use managed host representations in the VM. Records use shared layouts
-  with dense indexed fields, and enums share their runtime names. Ordinary registers are inline
-  and promote to stable slots only when their identity becomes observable. The bytecode compiler
-  anchors observable cleanup to ownership boundaries and emits `Drop` instructions for remaining
-  temporaries after their last use. Borrow edges are weak and therefore do not create reference
-  cycles. Target-aware native object layouts and ownership drop plans are calculated and emitted as
-  object descriptors. Cranelift record/enum code executes strong retain/release, copy-on-write,
-  and recursive tag-aware destruction plans, including collections, closures, and exceptional
-  frame exits. Both backends invoke `deinit` before releasing child values. Arbitrary cyclic owned
-  graphs remain open.
-- Assertions, checked integer arithmetic and negation, byte shifts, indexed bounds checks, abrupt
-  host failures, and synchronous call propagation are represented in ownership MIR. Runtime frame
-  teardown also handles execution errors outside these modeled operations; process-fatal events
-  do not acquire language cleanup guarantees from these edges.
-
-The intended evolution is path-sensitive loan states and precise provenance through erased
-callables and future aggregate forms while preserving the source model: ownership transfer stays
-explicit, references name groups, and API effects remain readable contracts rather than inferred
-lifetime syntax.
+- Path and callable reasoning is bounded. Unsupported predicates, opaque factory
+  targets, and excess alternatives conservatively combine possible origins; see
+  [analysis precision](analysis-precision.md).
+- Implicit copying remains a builtin classification. The structural `Copy`
+  capability supports explicit copies without changing assignment or captures.
+- Cross-task exclusivity and general retained foreign references require further
+  contracts. Supported remote behavior is defined in [remote semantics](remote-semantics.md);
+  supported foreign boundaries are defined in [C integration](c-integration.md).
+- Arbitrary cyclic owned graphs and process-fatal cleanup guarantees remain outside
+  the implemented model. Planned extensions are tracked in the [roadmap](roadmap.md).
 
 ### Non-returning expressions
 

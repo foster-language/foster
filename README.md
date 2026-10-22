@@ -1,91 +1,40 @@
 # Foster
 
-Foster is an experimental statically typed, general-purpose programming language with compile-time
-duck typing: a type conforms when its accessible contract matches, without nominal inheritance or
-runtime member lookup. Its defining direction is single ownership with group-parameterized
-references, inferred effect contracts, structurally adaptable records, and lightweight remote
-objects running on virtual threads. The bootstrap compiler and register VM are written in Rust.
-
-Use the [documentation guide](documentation/README.md) to find language, library, and compiler references.
-Coding agents should start with [AGENTS.md](AGENTS.md) and the
-[Foster writing guide](documentation/writing-foster.md), which includes compiler-checked examples.
-
-## Implementation
-
-The Rust workspace has six primary packages: `foster` (the toolchain driver),
-`foster-compiler`, `foster-vm`, `foster-bytecode`, `foster-native-runtime`, and
-`foster-host`. See [workspace architecture](documentation/workspace.md) for their responsibilities,
-dependencies, and build commands.
-
-The build-only [bootstrap compiler](compiler/bootstrap/README.md) generates the
-embedded standard library before the ordinary compiler builds.
-
-## Working in the repository
-
-| Area | Start here |
-| --- | --- |
-| Language checking and code generation | [Compiler](compiler/README.md) |
-| Executable formats and shared contracts | [Bytecode](bytecode/README.md) |
-| Execution and platform services | [VM](vm/README.md), [native runtime](runtime/README.md), [host](host/README.md) |
-| Commands, language server, debugger, and documentation | [Driver](src/README.md), [development tools](tools/README.md) |
-| Language and library source | [Standard library](library/README.md), [optional packages](packages/README.md) |
-| Editor integration | [Editors](editors/README.md) |
-| Correctness tests and component CI | [Test suites](tests/README.md), [CI selection](tools/ci/README.md) |
-| Performance workloads and measurements | [Benchmarks](benchmarks/README.md), [research](research/README.md) |
-
-Use `python tools/integration_tests.py --suite tooling --jobs 2` to work on one
-integration suite, or omit `--suite` to run all suites. Python 3.11 or newer is required.
-
-Project creation, manifest and dependency management, formatting policy, and documentation page generation are
-[written in Foster](tools/driver/README.md). The Rust build embeds their compiled
-bytecode in the command; using these tools does not require a source checkout.
+Foster is an experimental statically typed language with structural contracts,
+single ownership, group-based references, inferred effects, and remote objects.
+The compiler and runtimes are written in Rust; the standard library is written
+in Foster.
 
 ## Try it
 
-Use a release build for normal execution: `cargo build --release --bin foster`.
-The executable is `target/release/foster` (`foster.exe` on Windows). Rust debug
-builds also run an unoptimized interpreter; Foster bytecode optimization does
-not remove that overhead.
+Build with `cargo build --release --bin foster`. The executable is
+`target/release/foster` (`foster.exe` on Windows). Use release builds for normal
+execution and performance measurements.
 
 ```powershell
 cargo run --release --bin foster -- run examples/live_inventory_pipeline.fos
 cargo run --release --bin foster -- check examples/json_parser
-cargo run --release --bin foster -- check tests/fixtures/modules
-cargo run --release --bin foster -- fmt examples
-cargo run --release --bin foster -- fmt examples --check
-cargo run --release --bin foster -- test tests/foster
 cargo run --release --bin foster -- test library
-cargo run --release --bin foster -- run tests/fixtures/modules --no-optimize
-cargo run --release --bin foster -- run examples/arguments.fos -- --about
-cargo run --release --bin foster -- build benchmarks/fibonacci.fos --native -o fibonacci.exe
-cargo run --release --bin foster -- build benchmarks/fibonacci.fos --native --emit native-ir
-cargo run --release --bin foster -- pack examples/json_parser -o json-parser.fpk
-cargo run --release --bin foster -- run json-parser.fpk
-cargo run --release --bin foster -- docs library
-cargo run --release --bin foster -- docs library --serve
-cargo test
 ```
 
-## Projects and `foster.toml`
-
-Create a conventional Foster project with:
+With the executable on `PATH`:
 
 ```powershell
 foster init hello-foster
 cd hello-foster
 foster run
+foster check
+foster fmt --check
 ```
 
-`foster init` creates this layout without overwriting an existing manifest or source file:
+Read [Writing Foster](documentation/writing-foster.md) for complete, tested
+programs, or browse the [examples](examples/README.md). Coding agents must also
+read [AGENTS.md](AGENTS.md).
 
-```text
-hello-foster/
-  foster.toml
-  src/
-    main.fos
-```
+## Projects and dependencies
 
-The manifest identifies the directory where filesystem module discovery starts:
+`foster init` creates `foster.toml` and `src/main.fos` without overwriting
+existing files. A minimal manifest is:
 
 ```toml
 [package]
@@ -94,397 +43,77 @@ source = "src"
 entry = "main.fos"
 ```
 
-`package.name` is required. `package.source` defaults to `src` when omitted and must be a relative
-path contained by the project. `run`, `check`, `build`, `pack`, `test`, `fmt`, and `docs` accept a
-project directory or its `foster.toml` file. When their path is omitted, Foster searches the
-current directory and its parents for the nearest manifest; `fmt` and `docs` fall back to their
-existing current-directory behavior when no manifest exists. Explicit `.fos` files and legacy
-directories whose `main.fos` sits directly at the source root remain supported.
+Only `package.name` is required. `source` defaults to `src` and must stay within
+the project. `entry` defaults to `main.fos`; source libraries select `lib.fos`.
+An explicit entry must exist and be a filename without directories. It supplies
+the package root; other source files define submodules. A different entry cannot
+coexist with another `main.fos` in that source root.
 
-`package.entry` selects the package root's `.fos` filename within the source directory.
-It defaults to `main.fos`; source libraries explicitly select `entry = "lib.fos"`.
-An explicitly selected file must exist. Entries cannot be absolute paths or include directories.
-The selected file supplies the package root declarations; its filename does not add a module
-component. Other source files remain submodules. A different selected entry cannot coexist
-with another `main.fos` in the source root, which would conflict with the package root.
-
-Projects can depend on other Foster projects by relative path:
+Add source projects or compiled libraries as dependencies:
 
 ```toml
 [dependencies]
 collections = { path = "../foster-collections" }
+math = { path = "vendor/math.flib" }
 ```
 
-The dependency key is its module namespace. The dependency's selected entry file is mounted as
-`collections`, `src/map.fos` as `collections.map`, and `src/tree/set.fos` as
-`collections.tree.set`. Imports between modules in that dependency are rebased automatically, so
-its own `import map` resolves to `collections.map`. Imports of `core`, `std`, and dependencies
-declared by that project retain their declared names. Path dependencies are resolved transitively,
-compiled from source with the application, and included by `check`, `run`, `build`, `pack`, `test`,
-`docs`, and the language server. Dependency names must be portable module identifiers other than
-`core` or `std`; cycles, conflicting transitive names, missing projects, and duplicate mounted
-modules are errors.
+Dependency keys define import namespaces. A dependency's entry is mounted as
+`collections`, and its `map.fos` as `collections.map`. Internal imports are rebased
+to that namespace; `core`, `std`, and declared dependency names retain their
+meaning. Paths resolve transitively. Dependency names must be portable module
+identifiers other than `core` or `std`; cycles and conflicting names are errors.
+See [modules](documentation/language-design.md#source-files-and-modules) and
+[compiled libraries](documentation/compiled-libraries.md).
 
-Build independent libraries with `foster build path/to/library --library -o math.flib`.
-Consumers can use `math = { path = "vendor/math.flib" }` in `[dependencies]` without the library source.
-See [compiled libraries](documentation/compiled-libraries.md) for linking behavior and supported boundaries.
+Commands accept a source file, project directory, or manifest. With no path they
+search for the nearest `foster.toml`; `fmt` and `documentation` use the current
+directory if none exists. A directory with `main.fos` also works without a
+manifest. `run` calls `main`, which accepts no arguments or one
+`std.process.Arguments` value. Pass application arguments after `--`.
 
-`run` invokes `main`. It may take no parameters, or one `std.process.Arguments` value containing
-the executable name and following command-line values. Pass program arguments after `--`, for
-example `foster run app.fos -- input.txt --verbose`. A file is treated as a one-module package; a
-directory is discovered as a filesystem module tree whose entry point is `main.fos`. Optimization
-is enabled by default and can be selected with `--optimize` or `--no-optimize`.
+## Commands
 
-`foster fmt [file-or-directory]` formats `.fos` source in place. It preserves comments and literal
-contents while normalizing indentation, line endings, trailing whitespace, blank lines, and the
-final newline. Nonempty braces put their contents on following indented lines, with the closing
-brace on its own line (retaining expression suffixes such as `.field`). Empty braces stay `{}`.
-Enum declarations keep their first case after `=` and align later `|` cases on
-indented lines. `foster fmt --check` reports files that differ without writing them, making it
-suitable for CI. The current directory is used when no path is supplied.
+| Task | Command |
+| --- | --- |
+| Run with application arguments | `foster run app.fos -- input.txt` |
+| Run without Foster optimization | `foster run app.fos --no-optimize` |
+| Check or format source | `foster check path`, `foster fmt path`, `foster fmt path --check` |
+| Run source tests | `foster test path` |
+| Build and run bytecode | `foster build app.fos -o app.fbc`, `foster run app.fbc` |
+| Build a native executable | `foster build app.fos --native -o app.exe` |
+| Inspect native IR | `foster build app.fos --native --emit native-ir` |
+| Build a reusable library | `foster build path/to/library --library -o math.flib` |
+| Package an application | `foster pack path/to/project -o app.fpk` |
+| Run a package | `foster run app.fpk` |
+| Generate and view API documentation | `foster documentation library --serve` |
+| Start the language server | `foster lsp` |
 
-## Generated documentation
+Use `<command> --help` for options. The [documentation index](documentation/README.md)
+links the language, ownership, library, backend, C integration, and package guides.
+The [VS Code extension](editors/vscode/README.md) provides editor integration.
 
-`foster documentation [file-or-directory]` type-checks the package and generates a static API site in a
-`docs` directory within the selected package. The site is built from resolved HIR, so signatures include
-inferred types and effects. It includes public declarations and members with their attached
-Markdown documentation comments.
-Use `--include-private` to also document private types, functions, constants, and members,
-including those without documentation comments. Compiler-generated helper functions remain hidden.
-The index lists modules alphabetically in collapsible namespace groups, with indentation for nested
-modules, namespace shortcuts, and search that reveals matching groups.
-Module pages summarize the types included in the selected visibility mode,
-including fields, enum cases, required methods, and linked functions or methods.
-Visibility uses green public and amber private pills for declarations and fields.
-Expand **How to read this reference** for calling conventions, ownership, and effects.
-Each function name has one navigation entry; its included overloads appear with their own
-signatures and descriptions. Declaration counts count an overload group once.
-Type references in signatures and fields link to their declarations in the generated site.
-Primitive types link to their library module; omitted types and modules remain plain text.
-Module pages keep an overview and declaration navigation alongside the reference on wide screens.
-The sidebar groups functions under collapsible types, with a type overview link and function count.
-Following a declaration link opens its type; searching temporarily expands matching groups.
-Use **Find a declaration** to filter navigation by name or kind; press Escape to clear it.
-On smaller screens, **On this page** can be collapsed to make room for the reference.
+API documentation comes from source comments and resolved signatures. Its default
+destination is the selected package's `docs` directory. Use `--output PATH` for
+another destination, `--include-private` for internal APIs, and `--serve` to open
+a local server. `foster serve-documentation PATH` serves an existing site. Both
+serving commands support `--port NUMBER` and `--no-open`.
 
-Use `--output <directory>` to choose another destination. Add `--serve` to start a local server and
-open the site in the system browser:
+## Working in the repository
 
-```powershell
-foster documentation library --serve
-foster documentation library --output build/api-docs
-foster documentation library --output build/internal-docs --include-private
-foster serve-documentation documentation
-```
+Follow the [development policy](documentation/development-policy.md) and use the
+[workspace guide](documentation/workspace.md) for package boundaries and builds.
 
-Both serving commands accept `--port <number>` and `--no-open`. The latter is useful on headless
-machines. Generated `docs` directories are ignored during Foster module discovery.
+| Area | Guide |
+| --- | --- |
+| Language checking and code generation | [Compiler](compiler/README.md) |
+| Executable formats | [Bytecode](bytecode/README.md) |
+| Execution and platform services | [VM](vm/README.md), [native runtime](runtime/README.md), [host](host/README.md) |
+| CLI, language server, debugger, documentation | [Driver](src/README.md), [tools](tools/README.md) |
+| Foster library source | [Standard library](library/README.md), [optional packages](packages/README.md) |
+| Correctness and CI | [Testing](documentation/testing.md), [test suites](tests/README.md), [CI selection](tools/ci/README.md) |
+| Performance | [Benchmarks](benchmarks/README.md), [measurement guide](documentation/benchmarking.md), [research](research/README.md) |
 
-## Language snapshot
-
-The current implementation includes:
-
-- functions, recursion, explicit `let` local declarations, local inference, explicit generics,
-  closures, partial application, immediate-failure assertions, logical negation through `!` or
-  `not`, short-circuit `&&` and `||`, and statement loops with guarded `break` and `continue`
-  transfers;
-- ordinary typed `Result<T, E>` error values and single-evaluation `try` propagation with an exact
-  matching error type;
-- `Bool`, `Int`, binary64 `Float`, `String`, `CodePoint`, `Symbol`, `()`, homogeneous `List<T>`,
-  and zero-conversion `Sequence<T>` views, with lossless `Byte` and `CodePoint` widening to `Int`
-  when an assignment, argument, field, branch, or result expects `Int`;
-- generic records, associated factories, and arity- and parameter-type-based function/method
-  overloads, with exact matches preferred over lossless widening and ambiguous calls rejected;
-- `impl` blocks for associated functions and instance methods, private-by-default declarations,
-  transparent type aliases, and tagged enums with exhaustive pattern branches;
-- statically checked structural record adaptation, declaration-side composition such as
-  `type Text = & Sequence<String> & { ... }`, and intersection contracts such as
-  `Named & Located`;
-- borrow-by-default calls, explicit `move`, positional consuming callable types, group references,
-  closure capture modes, move/initialization checking, and structural invalidation;
-- inferred or explicit `read`, `mut`, `reshape`, `consume`, and `suspend` effects;
-- remote objects, virtual threads, FIFO method messages, futures, `await`, transferred messages,
-  call-scoped borrowed messages, and persistent remote read loans;
-- explicit core-library imports, structural resource locations and read/write capabilities, typed
-  filesystem APIs, parsed URI locations, and typed TCP connections;
-- line, nested block, and Markdown module (`//!`) and declaration (`///`, `/** ... */`) documentation comments;
-- a package-aware LSP and VS Code extension;
-- first-class `test "description" { ... }` declarations with a package-aware test runner;
-- an optional optimizing register-bytecode pipeline with a verifier and iterative VM call frames;
-  and
-- a Cranelift AOT backend for standalone executables, including closed-world specialization of
-  reachable generics, nominal aggregates, closures, structural contracts, host services, local
-  remote actors, futures, and blocking `await`.
-
-Module qualification uses `::`; type accessors and runtime value access use `.`. Imports keep their
-canonical dotted module names:
-
-```foster
-import core.result
-import core.result.Result
-
-
-let outcome = Result.Ok(42)
-let mapped = outcome.map((value: Int) -> value + 1)
-let name = user.name
-user.rename("Ada")
-```
-
-Use `::` only to select declarations through a module name, including module-qualified types and
-constants. Use `.` for type-associated functions, enum cases, fields, and instance methods. Core
-operations with a natural receiver are fluent (`values.map(transform)`, `outcome.map(transform)`);
-module qualification remains for namespace operations such as `toml::parse(source)`.
-
-Subjectless `branch { ... }` expressions may omit `_`; no match then does nothing
-and produces `()`. Branches producing a non-unit value still need a fallback:
-
-```foster
-func skip_whitespace(characters: String) -> String {
-    branch {
-        characters.empty? -> characters
-        characters.scalar_head().whitespace? -> skip_whitespace(characters.scalar_rest())
-        _ -> characters
-    }
-}
-```
-
-Arms may contain statement blocks. Their final expression is the arm value:
-
-```foster
-branch {
-    available? -> {
-        let value = load()
-        normalize(value)
-    }
-    _ -> fallback
-}
-```
-
-`if` is reserved for postfix control guards. The implemented form conditionally returns early:
-
-```foster
-func clamp_positive(value: Int) -> Int {
-    return 0 if value < 0
-    value
-}
-```
-
-Loops use the same guarded-transfer form and do not produce values:
-
-```foster
-loop {
-    value = next()
-    continue if value < 0
-    break if value == 0
-    consume(value)
-}
-```
-
-It is not a prefix conditional or a guard for ordinary calls and assignments; use `branch` for
-value-producing conditional logic.
-
-Subject branches destructure enum case payloads:
-
-```foster
-import core.result
-import core.result.Result
-
-
-func unwrap_or(result: Result<Int, String>, fallback: Int) -> Int {
-    branch result {
-        Result.Ok(value) -> value
-        Result.Error(_) -> fallback
-    }
-}
-```
-
-Use `try` to unwrap a successful result or return its error from a function with the same error
-type. The operation is evaluated once, and the enclosing function's success type may differ:
-
-```foster
-func validate() -> Result<Bool, String> {
-    let value = try read_value()
-    Result.Ok(value > 0)
-}
-```
-
-## Filesystem modules
-
-Directories implicitly define empty modules. A same-named `.fos` file optionally supplies the
-body of that module:
-
-```text
-json.fos          json (with declarations)
-json/                json (the same module, with children)
-  parser.fos      json.parser
-tools/               tools (implicit and empty)
-  text/
-    trim.fos      tools.text.trim
-```
-
-There are no `_module` or `index` files. Module components must be portable identifiers and cannot
-differ only by case. Imports use canonical dotted names:
-
-```foster
-import json
-import json.*
-import static json.*
-import json.parser as parser
-import json.parser.*
-import static json.parser.*
-import tools.text.trim
-import tools.text.trim.*
-import static tools.text.trim.*
-```
-
-Importing a module binds its final component as a qualifier. Import individual types with
-`import core.result.Result`, public types with `import core.result.*`, and public functions
-and constants with `import static std.fs.*`. Modules are public; declarations and record fields are private unless marked `pub`.
-
-## Standard library
-
-Foster has no prelude. Programs explicitly import embedded Foster-written modules such as
-`core.functions`, `core.option`, `std.iter`, `core.result`, `std.sequence`, `core.list`,
-`std.collections.map`, `std.resource`, `std.fs`, `std.path`, `std.uri`, `std.env`, `std.toml`,
-`std.net.tcp`, the `std.time` module family, and the `std.random` module family. Resource capabilities, URI parsing, the TOML 1.1
-parser, time arithmetic, fixed-zone resolution, ISO/RFC formatting, validation, table building,
-and rendering are Foster code; only general scalar conversion and host-dependent filesystem,
-socket, clock, and operating-system entropy operations cross the VM boundary. See
-[the standard library reference](documentation/core-library.md).
-
-## Compiler and VM
-
-The executable pipeline is:
-
-```text
-source
-  -> tokens and AST
-  -> resolved HIR
-  -> type, structural-contract, and fixed-point effect inference
-  -> loan, capture, group, and ownership checks
-  -> ownership MIR validation
-  -> shared logical-slot construction with explicit drops
-  -> layout legalization and shared typed SSA
-  -> shared inlining, constants, branch pruning, dead scalar elimination
-  -> verified SSA and rebuilt logical flow
-       -> de-SSA edge copies + register assignment -> VM representation cleanup -> verifier -> VM
-       -> specialization + native ABI/cleanup lowering -> Cranelift -> object -> linker -> executable
-```
-
-The VM remains the complete executable semantic reference; there is no AST interpreter fallback.
-Optimization can be disabled without changing semantics. Programs can be compiled to deterministic
-`.fbc` artifacts and run without their source:
-
-Statement blocks couple each statement to its source span. HIR analyses share one recursive
-visitor and one reachability-aware arm-flow summary, while ownership MIR and bytecode lowering
-consume the same authoritative semantic branch/loop CFG. This keeps branch-test order and control
-edges consistent between static checking and execution.
-
-```powershell
-cargo run --release --bin foster -- build examples/showcase/recursion.fos -o recursion.fbc
-cargo run --release --bin foster -- run recursion.fbc
-```
-
-The initial AOT backend emits host machine code with Cranelift and asks the installed Rust
-toolchain to link it into a standalone executable:
-
-```powershell
-cargo run --release --bin foster -- build benchmarks/fibonacci.fos --native -o fibonacci.exe
-./fibonacci.exe
-```
-
-Native compilation supports reachable scalar functions plus descriptor-backed user records,
-tagged enums, concrete closures, uniform higher-order callables, owned erased values, generic
-lists, immutable bytes, Foster-written byte buffers, local references, local remote actors, and
-futures. This includes nested fields, copy-on-write mutation, aggregate payload patterns,
-reference captures and parameters, direct and indirect calls, descriptor-dispatched structural
-contracts, generic specialization, methods, String/Symbol literal patterns, `print`/`println`,
-aggregate result formatting, friendly runtime failures, recursion, arithmetic, comparisons, and
-control flow. Supported core list, string, byte, and byte-buffer algorithms compile as ordinary
-Foster code. A versioned platform ABI provides filesystem and path operations, the working
-directory, clocks, operating-system entropy, handle-based TCP listeners and connections, and
-in-process actor workers. Native code can spawn owned or borrowed actors, queue FIFO method calls,
-and consume their futures with `await`. Await suspends an actor coroutine; an ordinary thread
-waits for completion. See [native compilation](documentation/native.md) for the exact boundary.
-
-The de-SSA VM emitter owns critical-edge splitting, cycle-safe parallel copies, and deterministic
-register assignment. Aggregate legalization separately freezes typed record slots, enum tags and
-payload shapes, closure capture ownership, reference place-handle layouts, and runtime structural
-values. Native target selection derives checked headers, sizes, alignments, field offsets, and drop
-plans and emits versioned read-only object descriptors. HIR lowering seals its temporary virtual
-registers into shared SSA and verifies dominance and block arguments. The VM branch de-SSAs that
-graph to portable bytecode and runs the ownership/type verifier after optimization and drop
-insertion before bytecode can be returned or executed. The Cranelift branch instead specializes
-the same sealed graph directly, without a bytecode round trip. There is no direct executable bypass
-around the shared IR. The Cranelift backend uses those descriptors for allocation and
-field/tag/capture offsets and generates retain/release, copy-on-write, indirect calls, and recursive
-tag-aware destruction directly in machine code; Rust supplies the allocator, process bootstrap,
-and the explicitly versioned operating-system service boundary.
-
-## Executable packages
-
-`foster pack` creates a deterministic ZIP-compatible `.fpk` containing compiled bytecode and
-application resources. For a directory package, a `resources/` child is included automatically;
-use `--resources <directory>` to select a different resource root. Packaged programs run without
-their Foster source and can read included files through `std.fs` beneath `resources/`:
-
-```powershell
-cargo run --release --bin foster -- pack path/to/application -o application.fpk
-cargo run --release --bin foster -- run application.fpk
-```
-
-The runtime validates the manifest and archive paths, expands resources into an isolated temporary
-working directory for the process, and removes that directory after execution. See the
-[package format](documentation/package-format.md) for the versioned layout and limits.
-
-See [the VM design](documentation/vm.md), [binary format](documentation/binary-format.md),
-[package format](documentation/package-format.md), and
-[benchmarking guide](documentation/benchmarking.md).
-
-## Language server
-
-Start the server over standard input/output with:
-
-```powershell
-cargo run --release --bin foster -- lsp
-```
-
-It supports package diagnostics with open-buffer overlays, document symbols, go-to-definition
-through imports and receiver-resolved methods, references, identity-aware rename, rich Markdown
-documentation hovers, call signature help, inferred type and argument-name inlay hints, and
-scope-aware completion. Diagnostics wait for a short typing pause before recompiling, while
-interactive requests still compile the latest open-buffer state on demand. Package recompilation
-reuses cached parsed modules and reparses only sources whose contents changed. The development VS
-Code extension keeps correctly positioned inlay hints in unchanged functions even when another
-function currently fails to compile. The server uses the same `compiler::check` frontend as the
-CLI `check` command; executable SSA sealing, bytecode verification, and native-subset diagnostics
-remain build/run concerns, so ordinary library documents do not need a `main`. The extension lives in
-[`editors/vscode`](editors/vscode/README.md).
-
-## Documentation map
-
-- [Semantic specification and conformance gaps](documentation/semantics.md)
-- [Remote lifecycle, cancellation, and failure contract](documentation/remote-semantics.md)
-- [Language design and implemented syntax](documentation/language-design.md)
-- [Pre-release development policy](documentation/development-policy.md)
-- [Roadmap](documentation/roadmap.md)
-- [Ownership and borrowing](documentation/ownership.md)
-- [Ownership verification](documentation/ownership-verification.md)
-- [Closures and group borrowing](documentation/closures.md)
-- [Effect derivation](documentation/effect-derivation.md)
-- [Compiler diagnostics](documentation/diagnostics.md)
-- [Testing Foster programs](documentation/testing.md)
-- [Implemented feature test coverage](documentation/test-coverage.md)
-- [Register VM](documentation/vm.md)
-- [Native compilation](documentation/native.md)
-- [Compiled bytecode format](documentation/binary-format.md)
-- [Symbolic modules and callable descriptors](documentation/symbolic-modules.md)
-- [Package archive format](documentation/package-format.md)
-- [Core library](documentation/core-library.md)
-- [Time in Foster](documentation/time.md)
-- [Randomness in Foster](documentation/random.md)
-- [Standard-library source guide](library/README.md)
-- [Optimization and benchmarks](documentation/benchmarking.md)
-- [Executable examples](examples/README.md)
-
-The executable programs under `examples/` demonstrate the current language and library capabilities.
+Run `cargo test` for the full Rust workspace checks. For focused integration
+suites use `python tools/integration_tests.py --suite tooling --jobs 2` (Python
+3.11 or newer); omit `--suite` to run all suites. Portable Foster tests run with
+`foster test tests/foster` and `foster test library`.

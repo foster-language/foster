@@ -92,12 +92,11 @@ storage and borrowing contract than the proposed list-backed arena.
 
 ## Runtime and platform
 
-- Extend [C integration](c-integration.md) beyond the Windows x86-64 generated
-  bridges and owning-resource wrappers: general ownership-transfer parameters,
-  relocatable package dependencies, foreign borrow domains, a focused SQLite
-  package, and then callbacks. The [integration plan](c-integration-plan.md)
-  describes these stages. Preserve single ownership, checked effects, named
-  lexical scopes, and VM/native parity.
+- Extend [C integration](c-integration.md) with retained foreign borrow domains
+  and parent/child resource lifetimes, general ownership transfers, relocatable
+  package dependencies, broader callback signatures, and additional platforms.
+  Validate a substantial wrapper such as SQLite against VM/native lifetime,
+  invalidation, cleanup, and failure tests before expanding the boundary.
 
 - Build reusable in-memory and policy-restricted providers on the shared `HostProvider` boundary.
   Filesystem, network, wall-clock, and monotonic-clock operations now support embedding-provider

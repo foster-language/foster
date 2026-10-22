@@ -3,7 +3,9 @@
 The standard library provides text, collections, iteration, error values, time,
 randomness, and host I/O. Foundational types live under `core`; general-purpose
 facilities live under `std`. Import modules explicitly: Foster has no prelude
-that imports their declarations for you.
+that imports their declarations for you. Import-free programs have only the minimal
+bootstrap surface. Imports expose public declarations and bind the final module
+component for qualification; see [import syntax](../documentation/language-design.md#source-files-and-modules).
 
 Start with the [core overview](core.fos) for foundational values and contracts,
 or the [standard overview](std.fos) for collections, algorithms, and host services.

@@ -1,28 +1,35 @@
 # Foster documentation
 
-Choose a starting point based on what you need to do. The language and library
-references describe implemented behavior; the roadmap describes proposed work.
+Start with [Writing Foster](writing-foster.md) for complete, compiler-checked
+examples and the [library guide](../library/README.md) to choose APIs.
 
-| Goal | Start here | More detail |
-| --- | --- | --- |
-| Run a first program or create a project | [Repository README](../README.md) | [Examples](../examples/README.md) |
-| Generate or edit Foster with a coding agent | [Agent instructions](../AGENTS.md) | [Writing Foster](writing-foster.md), with executable examples |
-| Learn syntax and language rules | [Language design](language-design.md) | [Semantic contract](semantics.md) |
-| Choose library APIs | [Library guide](../library/README.md) | [Library reference](core-library.md); generate the API site with `cargo run --bin foster -- docs library --serve` |
-| Understand ownership and mutation | [Ownership](ownership.md) | [Closures](closures.md), [effects](effect-derivation.md), [remote objects](remote-semantics.md) |
-| Work with specialized library APIs | [Time](time.md), [randomness](random.md), [hash collections](hash-collections.md) | [Host providers](host-providers.md) |
-| Understand text and Unicode data | [Unicode text](unicode.md) | [Unicode table maintenance](../tools/unicode/README.md) |
-| Build or distribute a program | [Native backend](native.md), [packages](package-format.md) | [Compiled libraries](compiled-libraries.md) |
-| Call C libraries | [C integration](c-integration.md) | [Further integration work](c-integration-plan.md); [host providers](host-providers.md) cover the separate platform-service boundary |
-| Contribute to Foster | [Workspace architecture](workspace.md), [development policy](development-policy.md), [testing](testing.md) | [Component tests](../tests/README.md), [CI selection](../tools/ci/README.md), [documentation standard](../library/DOCUMENTATION.md), [roadmap](roadmap.md) |
-| Measure performance or read recorded findings | [Benchmark workloads](../benchmarks/README.md), [measurement guide](benchmarking.md) | [Research and results](../research/README.md) |
-| Investigate compiler behavior | [Diagnostics](diagnostics.md), [VM](vm.md) | [Incremental checking](incremental-checking.md), [ownership verification](ownership-verification.md), [benchmarking](benchmarking.md), [LSP performance](../research/results/lsp-performance.md) |
+## Language and library
 
-API comments in `.fos` source are authoritative for individual operations and feed
-the generated reference and editor hovers. Guides supply context and complete
-examples. Internal formats and analysis documents target compiler contributors;
-they are not prerequisites for using the language.
+| Need | Reference |
+| --- | --- |
+| Setup, projects, and commands | [Repository README](../README.md) |
+| Syntax | [Language reference](language-design.md) |
+| Behavioral rules and known gaps | [Semantic specification](semantics.md) |
+| Borrowing, moves, and mutation | [Ownership](ownership.md), [closures](closures.md), [effects](effect-derivation.md) |
+| Remote objects and failures | [Remote semantics](remote-semantics.md) |
+| Library operations | [Library guide](../library/README.md); generate exact API signatures with `foster documentation library --serve` |
+| Specialized APIs | [Time](time.md), [randomness](random.md), [Unicode](unicode.md), [JSON](json.md), [hash collections](hash-collections.md), [processes](processes.md) |
+| Build and distribute | [Native compilation](native.md), [packages](package-format.md), [compiled libraries](compiled-libraries.md) |
+| Native services | [C integration](c-integration.md), [host providers](host-providers.md) |
 
-The generated reference includes private implementation details with explicit
-visibility labels. Start with public operations, and read each operation's bounds,
-ownership, and failure description before relying on behavior suggested by its name.
+Source comments define individual library operations. Guides explain usage;
+the semantic specification defines the language contract. Proposed work belongs
+in the [roadmap](roadmap.md).
+
+## Compiler contributors
+
+Follow [AGENTS.md](../AGENTS.md) and the [development policy](development-policy.md).
+
+| Area | Reference |
+| --- | --- |
+| Architecture | [Workspace](workspace.md), [VM](vm.md), [native backend](native.md) |
+| Executable artifacts | [Bytecode format](binary-format.md), [symbolic modules](symbolic-modules.md) |
+| Analysis and diagnostics | [Diagnostics](diagnostics.md), [interactive checking](incremental-checking.md), [analysis precision](analysis-precision.md) |
+| Verification | [Testing](testing.md), [coverage](test-coverage.md), [ownership verification](ownership-verification.md) |
+| Library contracts | [Documentation standard](../library/DOCUMENTATION.md), [contract inventory](library-contract-audit.md), [intrinsic boundary](core-library.md) |
+| Performance | [Benchmarking](benchmarking.md), [recorded research](../research/README.md) |

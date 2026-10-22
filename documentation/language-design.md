@@ -1,12 +1,8 @@
 # Foster Language Design
 
-For the backend-independent contract, stable rule IDs, and unresolved semantic questions, see the
-[semantic specification](semantics.md). This document remains the implemented syntax inventory.
-
-This document is an inventory of the Foster language implemented by this repository. It describes
-the syntax and semantics accepted by the bootstrap compiler, the behavior of its VM, and the core
-library shipped with it. It is descriptive rather than a roadmap: unimplemented ideas belong in
-focused design notes or issues, not in this language summary.
+This is the implemented syntax reference. For behavioral rules and known gaps,
+see the [semantic specification](semantics.md); proposed work belongs in the
+[roadmap](roadmap.md). Complete runnable examples are in [Writing Foster](writing-foster.md).
 
 ## Language snapshot
 
@@ -1163,6 +1159,11 @@ type TextCursor = & Sequence<String> & {
 }
 ```
 
+Every type declaration describes a contract. An empty record adds no requirements:
+`type C = & A & B` and `type C = & A & B & {}` describe the same effective contract.
+Adding fields extends it; implementations are checked at construction and
+structural use rather than required merely to declare the contract.
+
 The declaration imports the accessible `Sequence<String>` requirements into `TextCursor`'s
 effective contract. The requirements are functions, not record storage, so the constructor only
 initializes `source` and `offset`; the defining module supplies compatible `empty?`, `length`,
@@ -1231,186 +1232,23 @@ type-check against the resulting accessible structure. Associated factories are 
 Structural conformance without an explicit composition clause still checks an existing value's
 contract; it does not inject default methods into that value's nominal type.
 
-## Iteration contracts
+## Standard library contracts
 
-Iteration is expressed with two Foster-written callable contracts from `std.iter`, rather
-than a compiler-owned protocol:
+Iteration, binary storage, resources, streams, comparison, and hashing use ordinary
+structural contracts. The [library guide](../library/README.md) locates their
+authoritative declarations, effects, and usage examples in `.fos` source.
 
-```foster
-import core.option
+`for` uses `Iterable.iterator()` and `Iterator.next()`. `next()` mutates the cursor
+and returns `Option.None` after exhaustion. Opening a list or string iterator
+borrows its source and creates an independent cursor; `Iterator.from_sequence`
+is the explicit consuming alternative. String items are grapheme-cluster strings.
 
-
-
-pub type Iterator<T> = {
-    pub func next() -> Option<T> [mut self]
-}
-
-pub type Iterable<T> = {
-    pub func iterator() -> Iterator<T>
-}
-```
-
-`Iterator<T>` is stateful. Each `next()` call requires mutation permission on the iterator and
-returns `Option.None` after exhaustion. `Iterable<T>` is repeatable: its read-only `iterator()`
-method creates an independent iterator. An iterable is opened with `value.iterator()`.
-
-Both contracts use the same static duck typing and zero-conversion dispatch as other composed
-types. A concrete type implements them with `type Cursor<T> = & Iterator<T> & { ... }` or
-`type Collection<T> = & Sized & Iterable<T> & {}`. The core adapter
-`Iterator.from_sequence(values)` consumes a `Sequence<T>` into an independent iterator, so lists,
-strings, and user-defined sequence implementations can participate immediately.
-
-The standard collection hierarchy is behavioral rather than representational:
-
-```text
-Sized + Iterable<T>
-└── Collection<T>
-    ├── Sequence<T> → List<T>, String as Sequence<String>, Range<T>
-    ├── Set<T>
-    ├── Queue<T> → ListQueue<T>
-    ├── Deque<T> → ListDeque<T>
-    └── Stack<T> → ListStack<T>
-
-Map<K, V> & Collection<Entry<K, V>>
-```
-
-`List`, `String`, and `Sequence` expose `.iterator()` as a compiler-backed intrinsic whose public
-contract is an ordinary borrowed accessor. The VM creates an independent cursor over the source's
-read-only value view. Advancing the cursor mutates only cursor state, while explicit
-`Iterator.from_sequence` remains the ownership-transferring form.
-
-## Binary values
-
-Foster separates one bounded octet, immutable binary data, and mutable construction storage:
-
-```foster
-let byte = Byte.from(255)
-let data = Bytes.from_hex("89504e47")
-
-let buffer = ByteBuffer.with_capacity(4096)
-buffer.extend("Foster".bytes)
-let snapshot = buffer.snapshot()
-let finished = (move buffer).freeze()
-```
-
-`Byte` is a copy type in the inclusive range `0..255`. It widens to `Int` in expected-type contexts,
-and ordinary arithmetic also produces `Int`; bitwise and shift operators retain `Byte`. `Bytes` is
-an opaque Foster type over immutable
-contiguous raw storage, implementing
-the read-only `Sequence<Byte>` and `Collection<Byte>` behavior. `ByteBuffer` is mutable list-backed
-storage, but deliberately has no implicit position or limit; stateful reading can be introduced
-separately as a cursor contract.
-
-Passing all three types borrows by default. A buffer mutation requires `mut` access, indexed loans
-are invalidated by structural changes, and converting a buffer without copying requires an
-explicit move through `(move buffer).freeze()`. `buffer.snapshot()` is the copying alternative.
-Strings never convert to bytes implicitly: `.bytes` exposes immutable UTF-8 bytes, and
-`String.from_utf8(move bytes)` validates and transfers byte storage into a String.
-
-The same read-only `.bytes` property is available for `Int` (eight two's-complement
-bytes), `Float` (eight IEEE binary64 bytes), `CodePoint` (four scalar bytes, not UTF-8),
-`Byte` (one byte), `Bool` (one byte: zero or one), and `Bytes` (an independent copy).
-Import the corresponding core modules to use their APIs. Multi-byte scalar defaults
-are little-endian regardless of the machine. `Int`, `Float`, and `CodePoint` also expose
-`to_le_bytes()` and `to_be_bytes()`. These operations leave the receiver usable.
-
-For binary32 formats such as GPU vertex data, use `Float.to_f32_le_bytes()` or
-`Float.to_f32_be_bytes()`. They round to nearest with ties to even, preserve signed zero,
-support subnormals, produce infinity on overflow, and canonicalize NaN to `0x7fc00000`.
-Byte order is selected while encoding a typed value; arbitrary byte sequences do not
-carry a numeric width or byte order. Records, enums, and lists require an explicit
-serialization format.
-
-## Resource identity and capabilities
-
-Resource identity, provider association, and authority are separate structural contracts.
-`ResourceIdentifier` requires the deliberately uncommon `resource_id()` method, avoiding accidental
-conformance by every displayable value. `Resource<L>` requires only `location: L` and retains the
-concrete identifier kind instead of erasing it:
-
-```foster
-pub type ResourceIdentifier = {
-    pub func resource_id() -> String [read self]
-}
-
-pub type Resource<L> = {
-    pub location: L
-}
-```
-
-I/O is expressed independently by `Readable<E>`, `Writable<E>`, `PositionedReadable<E>`,
-`Appendable<E>`, `Sized<E>`, `Closable<E>`, and `Accepting<C, E>`. `ReadWrite<E>` combines the first
-two. A parameter that needs only reading therefore accepts any value matching `Readable<E>` and
-does not demand a location field. Conversely, a function can request `Resource<Path>` without
-granting or assuming I/O authority.
-
-`std.path.Path`, `std.uri.Uri`, and `std.net.tcp.TcpEndpoint` implement
-`ResourceIdentifier`. `std.fs.File` is an opaque `Resource<Path>` with file capabilities;
-`tcp::Connection` and `tcp::Listener` are opaque `Resource<TcpEndpoint>` providers with their own
-stream, accepting, and closing capabilities. Constructing identifiers and a `File` value does not
-perform I/O; connecting, listening, and accepting do access the host. A general URI
-is only an identifier: an explicit protocol provider must validate and convert it before opening a
-file, connection, or listener.
-
-## Stream contracts
-
-Stateful, positioned stream behavior remains expressed with generic structural contracts:
-
-```foster
-pub type Reader<E> = {
-    pub func read(maximum: Int) -> Result<Bytes, E> [mut self]
-}
-
-pub type Writer<E> = {
-    pub func write(contents: Bytes) -> Result<Int, E> [mut self]
-    pub func flush() -> Result<(), E> [mut self]
-}
-```
-
-`TextReader<E>` and `TextWriter<E>` provide the corresponding text operations. The error parameter
-allows a file to expose `IoError` while a socket exposes `NetworkError`; no universal I/O error is
-required. Empty bytes or text signal clean EOF. A binary write may be partial and therefore returns
-the number accepted. Successful non-empty reads and writes must make progress.
-
-Mutable parameters are borrowed places in VM call frames. Consequently, calling a generic helper
-such as `stream::copy(reader, writer)` mutates the original stateful values rather than temporary
-copies. Consuming parameters still transfer ownership, and read-only parameters retain ordinary
-borrow behavior.
-
-## Equality, ordering, and hashing contracts
-
-`core.ordering` separates comparison capabilities from the `Ordering` result value:
-
-```foster
-pub type Equality<T> = {
-    pub func equal?(other: T) -> Bool
-}
-
-pub type Ordered<T> = & Equality<T> & {
-    pub func compare(other: T) -> Ordering
-}
-
-pub type Hashing = {
-    pub func hash() -> Int
-}
-```
-
-`Ordered<T>` composes `Equality<T>`, so a conforming concrete type must provide both `equal?` and
-`compare`. `Hashing` is separate because ordered values do not necessarily need hashing and hashed
-values do not need a total order. These are statically checked, structurally dispatched contracts;
-they add no hidden fields or wrappers.
-
-Every type declaration describes a contract. Composition imports inherited requirements without
-requiring them to be repeated, and an empty record contributes no additional requirements. Thus
-`type C = & A & B` and `type C = & A & B & {}` have the same effective contract. Adding fields to
-the record body extends that contract. Implementations are checked when a named record is
-instantiated and when values are structurally adapted, rather than when the contract is declared.
-
-Implementations must preserve the usual laws: equality is reflexive, symmetric, and transitive;
-`compare` returns `Ordering.Equal` exactly when `equal?` is true; and equal values produce the same
-hash. Hash collisions between unequal values are valid. The compiler checks member signatures and
-effects, while these semantic laws remain the implementation's responsibility. All three are
-methods: zero-argument `hash` uses `value.hash()`, while `equal?` and `compare` take arguments.
+Contract matching checks accessible fields, method signatures, and effects.
+It does not establish behavioral promises such as total ordering, cryptographic
+strength, stream progress, or resource authority. Those belong to the operation's
+documented contract. See [hash collections](hash-collections.md),
+[host providers](host-providers.md), and the
+[contract inventory](library-contract-audit.md).
 
 ## Ownership and groups
 
@@ -1642,55 +1480,13 @@ initialization cycles.
 Because modules contain no runtime initialization, declarations in different modules may refer to
 one another when name and signature resolution can settle the cycle.
 
-## Filesystem, network, clock, and entropy access
+## Runtime and implementation
 
-`std.fs` exposes `File` resources along with compatible string-based UTF-8, binary, and directory
-operations. `std.path` provides typed `Path` values and platform path operations; `std.uri` provides
-parsed URI identities without performing network I/O; and `std.env` provides process environment
-queries. Fallible filesystem operations return `Result<..., IoError>`, using the shared error type
-from `std.io`.
-`std.net.tcp` exposes opaque listeners and connections with typed `NetworkError` results. Their
-public records and wrappers are Foster code; private VM intrinsics perform the host operations.
-`std.time` keeps exact durations, instants, civil values, fixed-zone resolution, and ISO/RFC text
-in Foster. Private VM intrinsics provide only canonical wall-clock and host-context-relative
-monotonic readings.
-`std.random` defines structural source contracts, deterministic generators, unbiased range
-reduction, probability distributions, sequence operations, and secure helpers in Foster. Its only
-private host intrinsic obtains bytes from the operating system's secure entropy source through a
-dependency-free platform shim.
-
-These modules use the current machine's isolated host context.
-
-## Compiler pipeline
-
-The implemented pipeline is:
-
-```text
-source -> tokens -> AST -> resolved HIR -> type/effect inference
-       -> loan/group/capture checks -> ownership MIR validation
-       -> shared logical-slot construction -> layout legalization -> shared typed SSA
-            -> de-SSA bytecode -> optional optimizer -> drops -> verifier -> VM
-            -> supported-subset validation -> Cranelift AOT -> host executable
-```
-
-The register VM is the complete executable semantic reference. The native backend compiles the
-reachable scalar, record, and tagged-variant subset described in [Native compilation](native.md).
-Temporary
-register construction is sealed into shared SSA before any executable bytecode is optimized,
-serialized, or run.
-
-Group information is normally erased before bytecode execution, but its consequences—moves,
-storage identity, and valid optimization facts—are represented by checked HIR, ownership MIR, and
-concrete VM operations.
-
-## Focused design documents
-
-- [Roadmap](roadmap.md)
-- [Ownership and borrowing](ownership.md)
-- [Closures and group borrowing](closures.md)
-- [Effect derivation](effect-derivation.md)
-- [Virtual machine](vm.md)
-- [Native compilation](native.md)
+Files, sockets, clocks, and operating-system entropy are exposed through Foster
+library wrappers over host services. See [host providers](host-providers.md).
+The [VM](vm.md) is the executable semantic reference; [native compilation](native.md)
+describes backend support and layout handling. Package boundaries are documented
+in the [workspace guide](workspace.md).
 
 ## Numeric conversions
 
