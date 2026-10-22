@@ -3596,6 +3596,15 @@ fn structural_reference_parameters_preserve_field_layouts() {
 }
 
 #[test]
+fn nested_reference_calls_preserve_original_storage() {
+    check(
+        "nested-reference-calls",
+        include_str!("../fixtures/programs/nested_reference_calls.fos"),
+        Ok("42"),
+    );
+}
+
+#[test]
 fn contract_reference_results_preserve_returned_storage() {
     check(
         "contract-reference-results",

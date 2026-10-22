@@ -66,8 +66,7 @@ func main() -> Int {
     let second = Other {
         marker: 9, tail: "second", value: 20
     }
-    let saved = existing(first)
-    let first_borrow = early(saved)
+    let first_borrow = early(existing(first))
     increase(first_borrow)
     assert(first_borrow.read() == 21)
     let second_borrow = ordinary(second)

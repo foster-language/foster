@@ -1339,9 +1339,7 @@ impl<'a> Builder<'a> {
                 .filter_map(|index| index.checked_sub(offset))
                 .filter_map(|index| arguments.get(index))
                 .copied()
-                .filter(|argument| {
-                    !matches!(self.hir.expressions[*argument], hir::Expr::Reference(_))
-                })
+                .filter(|argument| !self.reference_expression(*argument))
                 .collect::<Vec<_>>();
             for argument in storage_arguments {
                 if let Some(origin) = self
@@ -1355,6 +1353,7 @@ impl<'a> Builder<'a> {
             }
         }
         if let hir::Expr::Member { object, .. } = self.hir.expressions[callee]
+            && !self.reference_expression(object)
             && self.types.expression_type(callee).is_some_and(|ty| {
                 matches!(&self.types.types[ty], crate::types::Type::Function(signature)
                     if self.result_borrows_receiver(signature.result))
@@ -1420,7 +1419,7 @@ impl<'a> Builder<'a> {
                                     crate::types::Type::Reference { .. }
                                 )
                             })
-                        }) && !matches!(self.hir.expressions[*argument], hir::Expr::Reference(_))
+                        }) && !self.reference_expression(*argument)
                             && let Some(origin) = self
                                 .owned_place(*argument)
                                 .or_else(|| self.active_temporaries.get(argument).cloned())
@@ -1608,6 +1607,14 @@ impl<'a> Builder<'a> {
         self.types
             .expression_type(expression)
             .is_some_and(|ty| self.types.is_copy(ty))
+    }
+
+    // Reference values already carry their pointee's loans. Borrowing one must
+    // not make the result depend on the storage holding the reference itself.
+    fn reference_expression(&self, expression: ExprId) -> bool {
+        self.types
+            .expression_type(expression)
+            .is_some_and(|ty| matches!(self.types.types[ty], crate::types::Type::Reference { .. }))
     }
 
     fn local_value(&mut self, local: hir::LocalId, value: ExprId) {

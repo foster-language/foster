@@ -1,6 +1,35 @@
 use foster::vm::Value;
 
 const SOURCE: &str = include_str!("../fixtures/programs/parameter_groups.fos");
+const NESTED_REFERENCE_CALLS: &str =
+    include_str!("../fixtures/programs/nested_reference_calls.fos");
+
+#[test]
+fn nested_reference_calls_preserve_original_storage() {
+    assert_eq!(
+        foster::run(NESTED_REFERENCE_CALLS).unwrap(),
+        Value::Integer(42)
+    );
+}
+
+#[test]
+fn nested_reference_calls_reject_expired_or_invalidated_owners() {
+    let declarations = NESTED_REFERENCE_CALLS.split("func main()").next().unwrap();
+    for body in [
+        "let result = borrow(borrow(42))\nresult.copy()",
+        "let callback = borrow\nlet result = callback(callback(42))\nresult.copy()",
+        "let result = Item { value: 42 }.borrowed().borrowed()\nresult.read()",
+        "let original = 42\nlet result = borrow(borrow(original))\noriginal = 43\nresult.copy()",
+        "let callback = borrow\nlet original = 42\nlet result = callback(callback(original))\noriginal = 43\nresult.copy()",
+        "let result = :work { let original = 42\nborrow(borrow(original)) }\nresult.copy()",
+        "let item = Item { value: 42 }\nlet result = borrowed_item(item).borrowed()\nitem.replace(43)\nresult.read()",
+        "let item = Item { value: 42 }\nlet result = borrowed_item(item).borrowed()\nlet moved = move item\nresult.read()",
+    ] {
+        let source = format!("{declarations}\nfunc main() -> Int {{\n{body}\n}}");
+        let error = foster::compile(&source).unwrap_err();
+        assert_eq!(error.code.as_deref(), Some("E0401"), "{body}: {error}");
+    }
+}
 
 #[test]
 fn parameter_names_expose_storage_without_group_declarations() {

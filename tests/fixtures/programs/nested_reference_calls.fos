@@ -1,0 +1,36 @@
+type Item = {
+    value: Int
+}
+impl Item {
+    func borrowed() -> ref[self] Self {
+        ref self
+    }
+    func read() -> Int {
+        self.value
+    }
+    func replace(value: Int) -> () {
+        self = Item {
+            value
+        }
+    }
+}
+func borrow(item: ref[item] Int) -> ref[item] Int {
+    ref item
+}
+func borrowed_item(item: ref[item] Item) -> ref[item] Item {
+    ref item
+}
+func main() -> Int {
+    let original = 42
+    let direct = borrow(borrow(original))
+    assert(direct.copy() == 42)
+    let callback = borrow
+    let indirect = callback(callback(original))
+    assert(indirect.copy() == 42)
+    let item = Item {
+        value: 42
+    }
+    let receiver = borrowed_item(item).borrowed().borrowed()
+    assert(receiver.read() == 42)
+    original
+}
