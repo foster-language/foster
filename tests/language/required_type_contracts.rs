@@ -103,7 +103,7 @@ fn library_contracts_match_their_implementations() {
     let compilation = foster::check_package("library").unwrap();
     let mut audited = 0;
     let mut missing = Vec::new();
-    for (_, function) in compilation.hir.functions.iter() {
+    for (id, function) in compilation.hir.functions.iter() {
         if !function.public || function.receiver.is_none() {
             continue;
         }
@@ -113,7 +113,8 @@ fn library_contracts_match_their_implementations() {
         let Some(record) = compilation.hir.record_named(function.module, owner) else {
             if let Some(variant) = compilation.hir.variant_type_named(function.module, owner) {
                 let definition = &compilation.hir.variant_types[variant];
-                if !definition.public || !general_receiver(function, owner, &definition.parameters)
+                if !definition.public
+                    || !general_receiver(&compilation, id, function, owner, &definition.parameters)
                 {
                     continue;
                 }
@@ -147,7 +148,7 @@ fn library_contracts_match_their_implementations() {
         if !definition.public || definition.fields.is_empty() {
             continue;
         }
-        if !general_receiver(function, owner, &definition.parameters) {
+        if !general_receiver(&compilation, id, function, owner, &definition.parameters) {
             continue;
         }
         let name = function.name.strip_prefix(&format!("{owner}.")).unwrap();
@@ -192,7 +193,29 @@ fn buffer_read_requirements_are_callable_through_a_composed_view() {
     );
 }
 
-fn general_receiver(function: &foster::hir::Function, owner: &str, parameters: &[String]) -> bool {
+fn general_receiver(
+    compilation: &foster::compiler::Compilation,
+    id: foster::hir::FunctionId,
+    function: &foster::hir::Function,
+    owner: &str,
+    parameters: &[String],
+) -> bool {
+    // Storage-dependent methods remain implementation helpers. Implicit self is
+    // written as the owner in HIR; its resolved signature records the reference.
+    if compilation
+        .types
+        .function_type(id)
+        .is_some_and(|signature| {
+            signature.parameters.first().is_some_and(|parameter| {
+                matches!(
+                    compilation.types.types[parameter.ty],
+                    foster::types::Type::Reference { .. }
+                )
+            })
+        })
+    {
+        return false;
+    }
     // Constrained impl methods apply only to a subset of owner instantiations.
     // They must not become unconditional requirements on the owner's contract.
     if function
@@ -223,6 +246,7 @@ pub type Box<T> = { pub value: T }
 impl Box<T> {
     pub func ordinary() -> Int { 42 }
     pub func generic<U>(value: U) -> U [consume value] { move value }
+    pub func borrow() -> ref[self] Self { ref self }
 }
 impl Box<T & Copy> {
     pub func copied() -> T { self.value.copy() }
@@ -232,14 +256,17 @@ func main() -> Int { Box { value: 42 }.copied() }
     )
     .unwrap();
     let mut checked = 0;
-    for (_, function) in compilation.hir.functions.iter() {
+    for (id, function) in compilation.hir.functions.iter() {
         let expected = match function.name.as_str() {
             "Box.ordinary" | "Box.generic" => true,
-            "Box.copied" => false,
+            "Box.copied" | "Box.borrow" => false,
             _ => continue,
         };
-        assert_eq!(general_receiver(function, "Box", &["T".into()]), expected);
+        assert_eq!(
+            general_receiver(&compilation, id, function, "Box", &["T".into()]),
+            expected
+        );
         checked += 1;
     }
-    assert_eq!(checked, 3);
+    assert_eq!(checked, 4);
 }

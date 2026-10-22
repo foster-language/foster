@@ -527,6 +527,7 @@ fn function_signature(
     let generic_entries = function
         .type_parameters
         .iter()
+        .filter(|name| !crate::types::is_reference_parameter(name))
         .map(|name| {
             let mut entry = escape(name);
             for constraint in function

@@ -597,7 +597,8 @@ impl Checker<'_> {
             hir::Expr::Member { object, name } => {
                 let original = self.infer_expression(function, object)?;
                 let object = self.refined_receiver(object, original);
-                let stored_field = self.has_stored_member(&object, &name)?;
+                let storage = self.constraint_view(function, object.clone())?;
+                let stored_field = self.has_stored_member(&storage, &name)?;
                 let member = self.infer_member(function, object, &name)?;
                 let kind = if stored_field {
                     crate::semantics::MemberKind::StoredPlace

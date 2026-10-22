@@ -13,6 +13,22 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 #[test]
+fn reference_contract_signature_keeps_the_source_contract() {
+    let compilation = crate::compile(include_str!(
+        "../../../tests/fixtures/programs/contract_reference_parameters.fos"
+    ))
+    .unwrap();
+    let module = compilation.hir.module_named("main").unwrap();
+    let function = compilation.hir.function_named(module, "update").unwrap();
+    let signature = function_signature(&compilation.into(), function, false);
+    assert!(
+        signature.contains("func update(item: ref[item] Replace)"),
+        "{signature}"
+    );
+    assert!(!signature.contains("$reference:"), "{signature}");
+}
+
+#[test]
 fn reserved_self_type_cannot_be_a_rename_target() {
     for source in ["type Item = {}\n", "enum Item = One | Two\n"] {
         let (mut workspace, uri, _) = fixture_workspace();

@@ -90,6 +90,16 @@ impl Checker<'_> {
             ..TypeInformation::default()
         };
         let mut interner = HashMap::new();
+        for (name, contract) in &self.reference_contracts {
+            let contract = intern_type(
+                &mut information,
+                &mut interner,
+                self.resolved(contract.clone()),
+            );
+            information
+                .reference_contracts
+                .insert(name.clone(), contract);
+        }
 
         for (record, mut fields) in record_field_schemas {
             fields.sort_unstable_by(|left, right| left.0.cmp(&right.0));
@@ -381,7 +391,11 @@ impl Checker<'_> {
     pub(super) fn describe(&self, ty: &Ty) -> String {
         match self.resolved(ty.clone()) {
             Ty::Variable(_) => "unknown".into(),
-            Ty::Generic(name) => name,
+            Ty::Generic(name) => self
+                .reference_contracts
+                .get(&name)
+                .map(|contract| self.describe(contract))
+                .unwrap_or(name),
             Ty::Never => "Never".into(),
             Ty::Unit => "()".into(),
             Ty::Bool => "Bool".into(),

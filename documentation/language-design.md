@@ -1423,6 +1423,14 @@ A reference is parameterized by a group describing its possible target locations
 ref[people] Person
 ```
 
+The pointee annotation is a contract on the argument. For example,
+`func update(item: ref[item] Replace)` accepts an argument satisfying `Replace`
+while retaining a reference to that argument's original storage. Its body is
+checked against the declared contract, including its accessible fields, required
+methods, and effects. The call does not convert the item's layout to that of the
+declaration. Compiler specialization retains the argument's storage layout;
+different parameters may receive different layouts satisfying the same contract.
+
 Lexical scopes define groups for local storage. A function signature names incoming groups
 using its parameter names. For example, a parameter `people: List<Person>` can supply a result
 of type `Option<ref[people] Person>`. There are no separate group-parameter declarations.

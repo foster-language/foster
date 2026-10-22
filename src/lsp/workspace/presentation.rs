@@ -232,6 +232,7 @@ pub(super) fn function_signature(
         &function
             .type_parameters
             .iter()
+            .filter(|name| !crate::types::is_reference_parameter(name))
             .map(|name| {
                 let requirements = function
                     .constraints

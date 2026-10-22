@@ -183,7 +183,11 @@ impl<'a> TypeLinks<'a> {
                     arguments_html(arguments.iter().map(|ty| self.resolved(*ty)).collect())
                 )
             }
-            Type::Generic(name) => escape(name),
+            Type::Generic(name) => types
+                .reference_contracts
+                .get(name)
+                .map(|contract| self.resolved(*contract))
+                .unwrap_or_else(|| escape(name)),
             Type::Reference { group, value } => {
                 format!("ref[{}] {}", escape(group), self.resolved(*value))
             }

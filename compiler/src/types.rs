@@ -147,8 +147,15 @@ impl CoreRecords {
     }
 }
 
+/// Compiler-only type parameters that preserve incoming reference storage layouts.
+pub fn is_reference_parameter(name: &str) -> bool {
+    name.starts_with("$reference:")
+}
+
 #[derive(Debug, Default)]
 pub struct TypeInformation {
+    /// Source contracts for the anonymous type parameters of reference parameters.
+    pub reference_contracts: HashMap<String, TypeId>,
     /// Runtime inhabitants accepted by the same structural checks as assignment.
     pub type_conformances: HashMap<
         (FunctionId, crate::codegen::types::ExecutableType),
@@ -366,7 +373,11 @@ impl TypeInformation {
 
     pub fn display(&self, ty: TypeId) -> String {
         match &self.types[ty] {
-            Type::Generic(name) => name.clone(),
+            Type::Generic(name) => self
+                .reference_contracts
+                .get(name)
+                .map(|contract| self.display(*contract))
+                .unwrap_or_else(|| name.clone()),
             Type::Never => "Never".into(),
             Type::Unit => "()".into(),
             Type::Bool => "Bool".into(),

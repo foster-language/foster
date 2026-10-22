@@ -34,6 +34,33 @@ func duplicate<T & Copy>(value: T) -> T [read value] { value.copy() }
 func main() -> Int { duplicate(42) }
 ```
 
+A reference parameter can name a structural contract directly. The argument must
+satisfy that contract; the body can use the fields, methods, and effects it
+guarantees. The reference still reaches the original argument's storage. Passing
+it does not copy the item or change its layout to the contract's declaration.
+The compiler retains the argument's layout when specializing the helper.
+
+```foster
+type Replace = { func replace(value: Int) -> () [reshape self] }
+type Item = & Replace & { value: Int }
+impl Item {
+    func replace(value: Int) -> () [reshape self] { self = Item { value } }
+}
+func update(item: ref[item] Replace) -> () { item.replace(42) }
+func main() -> Int {
+    let item = Item { value: 1 }
+    update(item)
+    item.value
+}
+```
+
+Use a named constrained parameter such as `T & Replace` when other parts of the
+signature need to refer to the same argument type. Separate reference parameters
+with the same contract may receive arguments with different layouts.
+Fields in the contract can be updated individually. Replacing the entire item
+requires an operation supplied by its contract, since the caller may have
+additional fields that the helper cannot construct.
+
 ## Record destructuring
 
 Select fields by name, use `field: local` to rename a binding, and omit fields you

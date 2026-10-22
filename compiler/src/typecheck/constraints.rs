@@ -15,7 +15,12 @@ impl Checker<'_> {
     }
     pub(super) fn validate_constraints(&mut self) -> Result<(), FosterError> {
         for (function, definition) in self.hir.functions.iter() {
-            if !definition.constraints.is_empty() && definition.receiver.is_some() {
+            if definition
+                .constraints
+                .iter()
+                .any(|constraint| !crate::types::is_reference_parameter(&constraint.parameter))
+                && definition.receiver.is_some()
+            {
                 let receiver = self.functions[&function].parameters[0].ty.clone();
                 let methods = match receiver {
                     Ty::Record(record, arguments) => {
@@ -52,7 +57,10 @@ impl Checker<'_> {
                     }
                 }
             }
-            if !definition.constraints.is_empty()
+            if definition
+                .constraints
+                .iter()
+                .any(|constraint| !crate::types::is_reference_parameter(&constraint.parameter))
                 && definition.receiver.is_some()
                 && matches!(definition.name.rsplit('.').next(), Some("copy" | "deinit"))
             {
@@ -112,7 +120,10 @@ impl Checker<'_> {
         let requirements = self.effective_record_methods(*record, arguments)?;
         for (_, method) in self.hir.functions.iter() {
             if method.receiver.is_some()
-                && !method.constraints.is_empty()
+                && method
+                    .constraints
+                    .iter()
+                    .any(|constraint| !crate::types::is_reference_parameter(&constraint.parameter))
                 && requirements
                     .iter()
                     .any(|required| method.name.rsplit('.').next() == Some(required.name.as_str()))
@@ -199,6 +210,11 @@ impl Checker<'_> {
     ) -> Result<(), FosterError> {
         let definition = &self.hir.functions[target];
         for constraint in &definition.constraints {
+            if self.suppress_constraint_assumptions
+                && crate::types::is_reference_parameter(&constraint.parameter)
+            {
+                continue;
+            }
             let actual = bindings
                 .get(&constraint.parameter)
                 .cloned()

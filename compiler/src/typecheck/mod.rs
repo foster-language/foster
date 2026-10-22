@@ -15,6 +15,7 @@ mod output;
 mod overloads;
 mod predicates;
 mod records;
+mod reference_parameters;
 mod substitutions;
 mod transactions;
 mod unify;
@@ -59,6 +60,7 @@ fn check_bodies(
     recover: Option<&HashSet<hir::ModuleId>>,
     cache: Option<incremental::SharedBodyCache>,
 ) -> Result<(TypeInformation, Vec<crate::diagnostic::Diagnostic>), Vec<FosterError>> {
+    reference_parameters::lower(hir).map_err(|error| vec![error])?;
     loop {
         crate::compiler::cancellation::check().map_err(|e| vec![e])?;
         crate::compiler::profile::count("types.iterations");
@@ -147,6 +149,7 @@ impl<'a> Checker<'a> {
             effect_seeds: Default::default(),
             effect_dependencies: Default::default(),
             resolving_aliases: Vec::new(),
+            reference_contracts: HashMap::new(),
             constraint_proofs: Vec::new(),
             suppress_constraint_assumptions: false,
         }
@@ -583,6 +586,12 @@ impl<'a> Checker<'a> {
                     .iter()
                     .filter_map(|parameter| parameter.ty.as_ref())
                     .chain(function.return_type.iter())
+                    .chain(
+                        function
+                            .constraints
+                            .iter()
+                            .map(|constraint| &constraint.requirement),
+                    )
                     .any(uses_self_type)
             {
                 let owner_annotation = if let Some(target) = &function.owner_type {
@@ -627,6 +636,14 @@ impl<'a> Checker<'a> {
                 };
                 let owner_type = self.annotation_type(module, &owner_annotation, &generics)?;
                 generics.insert("Self".into(), owner_type);
+            }
+            for constraint in &function.constraints {
+                if crate::types::is_reference_parameter(&constraint.parameter) {
+                    let requirement =
+                        self.annotation_type(module, &constraint.requirement, &generics)?;
+                    self.reference_contracts
+                        .insert(constraint.parameter.clone(), requirement);
+                }
             }
             let parameters = function
                 .parameters

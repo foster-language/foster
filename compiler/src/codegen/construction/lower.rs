@@ -616,7 +616,18 @@ impl FunctionCompiler<'_> {
                         };
                         let arguments = arguments
                             .iter()
-                            .map(|argument| self.expression(*argument))
+                            .enumerate()
+                            .map(|(index, argument)| {
+                                let reference = self.types.expression_type(*callee).is_some_and(|ty| {
+                                    matches!(&self.types.types[ty], crate::types::Type::Function(signature)
+                                        if matches!(self.types.types[signature.parameters[index].ty], crate::types::Type::Reference { .. }))
+                                });
+                                if reference && !matches!(self.hir.expressions[*argument], hir::Expr::Reference(_)) {
+                                    self.reference_expression(*argument, span.clone())
+                                } else {
+                                    self.expression(*argument)
+                                }
+                            })
                             .collect::<Result<Vec<_>, _>>()?;
                         let destination = self.allocate();
                         self.emit(

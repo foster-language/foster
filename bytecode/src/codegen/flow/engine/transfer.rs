@@ -360,6 +360,7 @@ pub(super) fn transfer(
                     | ExecutableType::List(_)
                     | ExecutableType::Bytes
                     | ExecutableType::ByteBuffer
+                    | ExecutableType::Generic(_)
                     | ExecutableType::Unknown
             ) {
                 return type_error(function, index, "record", &object_type);

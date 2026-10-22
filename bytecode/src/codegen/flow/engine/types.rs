@@ -36,7 +36,7 @@ pub(super) fn verification_field_type(
             "rest" => Some(receiver.clone()),
             _ => None,
         },
-        ExecutableType::Unknown => Some(ExecutableType::Unknown),
+        ExecutableType::Unknown | ExecutableType::Generic(_) => Some(ExecutableType::Unknown),
         _ => None,
     }
 }

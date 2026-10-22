@@ -27,6 +27,8 @@ and the standard library are written in `.fos` files.
   Use `static func` inside an `impl` for associated functions without a receiver.
   `Self` is the implemented value type; `self` is the value and storage group.
   Borrowed results use `ref[self] T`; ordinary receivers borrow by default.
+  Explicit reference parameters can name structural contracts, for example
+  `item: ref[item] Replace`; the argument keeps its original storage layout.
   Ordinary methods can replace the caller's whole binding with `self = value`;
   replacement requires `reshape self` (inferred when effects are omitted) and
   invalidates overlapping borrows.

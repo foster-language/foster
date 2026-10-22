@@ -1,0 +1,27 @@
+type Value = {
+    pub value: Int
+}
+type Item = {
+    pub value: Int, pub extra: Int
+}
+type Reordered = {
+    pub marker: Int, pub value: Int
+}
+func bump(item: ref[item] Value) -> () [mut item.value] {
+    item.value = item.value + 1
+}
+func forward(item: ref[item] Value) -> () {
+    bump(item)
+}
+func main() -> Int {
+    let first = Item {
+        value: 1, extra: 9
+    }
+    let second = Reordered {
+        marker: 7, value: 39
+    }
+    forward(first)
+    forward(second)
+    assert(first.extra == 9 && second.marker == 7)
+    first.value + second.value
+}

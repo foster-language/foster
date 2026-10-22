@@ -1,0 +1,60 @@
+type Replace = {
+    pub func replace(value: Int) -> () [reshape self]
+}
+type Item = & Replace & {
+    value: Int
+}
+impl Item {
+    func replace(value: Int) -> () [reshape self] {
+        self = Item {
+            value
+        }
+    }
+    func extra() -> Int {
+        42
+    }
+}
+type Other = & Replace & {
+    value: Int, marker: Int
+}
+impl Other {
+    func replace(value: Int) -> () [reshape self] {
+        self = Other {
+            value, marker: 100
+        }
+    }
+}
+func update(item: ref[item] Replace) -> () {
+    item.replace(21)
+}
+func forward(item: ref[item] Replace) -> () {
+    update(item)
+}
+func captured(item: ref[item] Replace) -> () {
+    let change = [ref item] () -> {
+        item.replace(21)
+        ()
+    }
+    change()
+}
+func pair(left: ref[left] Replace, right: ref[right] Replace) -> () {
+    forward(left)
+    forward(right)
+    captured(left)
+    captured(right)
+}
+type Holder = {
+    first: Item, second: Other
+}
+func main() -> Int {
+    let holder = Holder {
+        first: Item {
+            value: 1
+        }, second: Other {
+            value: 2, marker: 0
+        }
+    }
+    pair(holder.first, holder.second)
+    assert(holder.second.marker == 100)
+    holder.first.value + holder.second.value
+}

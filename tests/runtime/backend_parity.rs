@@ -3576,3 +3576,66 @@ fn implicit_receiver_replacement_preserves_caller_storage() {
         Ok("42"),
     );
 }
+
+#[test]
+fn contract_reference_parameters_preserve_argument_storage() {
+    check(
+        "contract-reference-parameters",
+        include_str!("../fixtures/programs/contract_reference_parameters.fos"),
+        Ok("42"),
+    );
+}
+
+#[test]
+fn structural_reference_parameters_preserve_field_layouts() {
+    check(
+        "structural-reference-fields",
+        include_str!("../fixtures/programs/structural_reference_fields.fos"),
+        Ok("42"),
+    );
+}
+
+#[test]
+fn compiled_contract_reference_parameters_preserve_argument_storage() {
+    let source = include_str!("../fixtures/programs/contract_reference_parameters.fos")
+        .replace("type Replace =", "pub type Replace =")
+        .replace("func update(", "pub func update(");
+    let mut package =
+        foster::package::Package::from_program_with_core("main", foster::parse(&source).unwrap())
+            .unwrap();
+    package
+        .symbol_modules
+        .insert("main".into(), ("contracts".into(), "main".into()));
+    let producer = foster::compiler::check(package).unwrap();
+    let library = foster::library::build(&producer).unwrap();
+    let bytes = foster::library::encode(&library).unwrap();
+    foster::library::decode(&bytes).unwrap();
+    let scratch = Scratch::new("compiled-contract-reference-parameters");
+    std::fs::create_dir_all(scratch.0.join("src")).unwrap();
+    std::fs::write(scratch.0.join("contracts.flib"), bytes).unwrap();
+    std::fs::write(scratch.0.join("foster.toml"), "[package]\nname = 'contract_consumer'\n[dependencies]\ncontracts = { path = 'contracts.flib' }\n").unwrap();
+    std::fs::write(
+        scratch.0.join("src/main.fos"),
+        r#"
+import contracts.Replace
+import static contracts.update
+type Item = & Replace & { value: Int }
+impl Item {
+    func replace(value: Int) -> () [reshape self] { self = Item { value } }
+}
+func main() -> Int {
+    let item = Item { value: 1 }
+    update(item)
+    item.value + 21
+}
+"#,
+    )
+    .unwrap();
+    let project = foster::project::Project::load(&scratch.0).unwrap();
+    let compilation = foster::check_project(&project).unwrap();
+    check_compilation(
+        "compiled-contract-reference-consumer",
+        &compilation,
+        Ok("42"),
+    );
+}

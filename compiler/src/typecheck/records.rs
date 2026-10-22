@@ -815,10 +815,11 @@ impl Checker<'_> {
             let Some(receiver) = self.expressions.get(&object).cloned() else {
                 continue;
             };
-            if self.has_stored_member(&receiver, &name)? {
+            let function = self.hir.expression_functions[&call];
+            let storage = self.constraint_view(function, receiver.clone())?;
+            if self.has_stored_member(&storage, &name)? {
                 continue;
             }
-            let function = self.hir.expression_functions[&call];
             let member = self.infer_member(function, receiver, &name)?;
             if matches!(self.resolved(member.clone()), Ty::Callable { .. }) {
                 self.member_kinds

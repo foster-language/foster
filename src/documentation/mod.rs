@@ -56,6 +56,24 @@ mod tests {
     use super::*;
 
     #[test]
+    fn reference_contract_parameters_keep_source_signatures_in_documentation() {
+        let source =
+            include_str!("../../tests/fixtures/programs/contract_reference_parameters.fos")
+                .replace("type Replace =", "pub type Replace =")
+                .replace("func update(", "pub func update(");
+        let compilation = crate::compile(&source).unwrap();
+        let site = render::site(&compilation).unwrap();
+        let page = site
+            .modules
+            .iter()
+            .find(|page| page.html.contains("func update("))
+            .unwrap();
+        assert!(!page.html.contains("$reference:"), "{}", page.html);
+        assert!(!page.html.contains("update&lt;"));
+        assert!(page.html.contains("item: ref[item]"));
+    }
+
+    #[test]
     fn enum_parameters_appear_in_documentation() {
         let compilation = crate::compile("pub enum Event = Created(Int, Bool) | Finished").unwrap();
         let site = render::site(&compilation).unwrap();

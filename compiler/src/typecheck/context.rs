@@ -81,6 +81,7 @@ pub(super) struct Checker<'a> {
     pub(super) effect_seeds: HashMap<FunctionId, effect_worklist::EffectSummary>,
     pub(super) effect_dependencies: HashMap<FunctionId, HashSet<FunctionId>>,
     pub(super) resolving_aliases: Vec<hir::VariantTypeId>,
+    pub(super) reference_contracts: HashMap<String, Ty>,
 }
 
 impl Ty {

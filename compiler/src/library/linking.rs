@@ -240,11 +240,16 @@ pub(crate) fn link(
             continue;
         };
 
-        let Some(symbols::Parameter {
-            ty: symbols::SymbolType::Nominal(name, _),
-            ..
-        }) = definition.descriptor.parameters.first()
-        else {
+        let Some(parameter) = definition.descriptor.parameters.first() else {
+            continue;
+        };
+        // Storage-dependent implicit receivers retain a reference in their
+        // signature. Dispatch belongs to the referenced value's descriptor.
+        let mut receiver = &parameter.ty;
+        while let symbols::SymbolType::Reference(_, value) = receiver {
+            receiver = value;
+        }
+        let symbols::SymbolType::Nominal(name, _) = receiver else {
             continue;
         };
         let Some(ty) = nominal_types.get(name) else {

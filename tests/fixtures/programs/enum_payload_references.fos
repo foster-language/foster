@@ -66,9 +66,8 @@ func via_contract(value: BorrowItem) -> Int {
     item.value
 }
 func replace_item(value: ref[value] Item) -> () {
-    value = Item {
-        value: 42, text: "replaced"
-    }
+    value.value = 42
+    value.text = "replaced"
     ()
 }
 enum Carrier<T> = Empty | Stored(T)
