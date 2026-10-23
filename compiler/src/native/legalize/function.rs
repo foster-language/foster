@@ -40,17 +40,53 @@ pub(in crate::native) fn inference_body(
     specialize_type_branches(&reachable_shared, instance, environment)
 }
 
-pub(in crate::native) fn lower_shared_to_native_ir(
+/// Inferred representations over portable SSA, before any ABI instructions or
+/// cleanup are emitted. Storage planning and lowering consume the same evidence.
+pub(in crate::native) struct FunctionRepresentations {
+    pub body: ir::Function,
+    pub inferred: crate::native::inference::InferredRepresentations,
+    pub result: NativeType,
+    remote_calls: HashMap<ir::Value, crate::native::VerifiedRemoteCall>,
+}
+
+pub(in crate::native) fn plan_function(
     shared: &ir::Function,
-    metadata: &FunctionDeclaration,
     source_states: &crate::codegen::flow::FunctionFacts,
     function_signature: &ir::Signature,
     instance: &SpecializationKey,
     environment: NativeIrEnvironment<'_>,
-) -> Result<(ir::Function, FailureCleanup), FosterError> {
+) -> Result<FunctionRepresentations, FosterError> {
     let remote_calls = verified_remote_calls(shared, source_states, instance, environment)?;
-    let specialized = inference_body(shared, source_states, instance, environment);
-    let shared = &specialized;
+    let body = inference_body(shared, source_states, instance, environment);
+    let inferred = infer_value_types(
+        &body,
+        &function_signature.parameters,
+        instance,
+        environment,
+        &remote_calls,
+    )?;
+    Ok(FunctionRepresentations {
+        body,
+        inferred,
+        result: function_signature.result,
+        remote_calls,
+    })
+}
+
+pub(in crate::native) fn lower_shared_to_native_ir(
+    representations: FunctionRepresentations,
+    metadata: &FunctionDeclaration,
+    function_signature: &ir::Signature,
+    instance: &SpecializationKey,
+    environment: NativeIrEnvironment<'_>,
+) -> Result<(ir::Function, FailureCleanup), FosterError> {
+    let FunctionRepresentations {
+        body,
+        inferred,
+        remote_calls,
+        ..
+    } = representations;
+    let shared = &body;
     let external_values = shared
         .captures
         .iter()
@@ -76,13 +112,6 @@ pub(in crate::native) fn lower_shared_to_native_ir(
         .filter_map(|(value, _)| shared.values.hint(value.index()))
         .chain(reference_homes.keys().copied())
         .collect::<BTreeSet<_>>();
-    let inferred = infer_value_types(
-        shared,
-        &function_signature.parameters,
-        instance,
-        environment,
-        &remote_calls,
-    )?;
     // A reference extracted from a variant remains the assignment target for
     // its local, just like an explicit reference parameter.
     let mut assignment_references = reference_homes.clone();

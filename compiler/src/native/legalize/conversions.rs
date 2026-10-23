@@ -50,7 +50,7 @@ pub(super) fn result_error_conversion(
 }
 
 #[derive(Clone, Copy)]
-pub(super) enum ReturnConversion {
+pub(in crate::native) enum ReturnConversion {
     Reference,
     Callable,
     Box,
@@ -60,7 +60,7 @@ pub(super) enum ReturnConversion {
 }
 
 impl ReturnConversion {
-    pub(super) fn between(
+    pub(in crate::native) fn between(
         source: NativeType,
         target: NativeType,
         environment: NativeIrEnvironment<'_>,

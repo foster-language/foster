@@ -183,79 +183,82 @@ pub(super) fn retained_reference_flow(
     Err(native_error("retained reference flow did not converge"))
 }
 
-impl NativeProgram<'_> {
-    pub(super) fn resolve_reference_results(
-        &mut self,
-        facts: &specialization::FlowFacts,
-    ) -> Result<(), FosterError> {
-        let declared = self.function_types.clone();
-        // A caller can forward another function's returned reference. Settle those
-        // dependencies before emitting any caller; source conformance was checked
-        // independently, so a contract annotation never selects a pointee layout.
-        for _ in 0..=self.instances.len() {
-            let mut updates = Vec::new();
-            let environment = self.environment();
-            for instance in &self.instances {
-                let metadata = &self.program.functions[&instance.key.function];
-                if !metadata.returns_reference {
-                    continue;
-                }
-                let source = &self.program.bodies[&instance.key.function];
-                let states = &facts[&instance.key.function];
-                let body = legalize::inference_body(source, states, &instance.key, environment);
-                let remote = verified_remote_calls(&body, states, &instance.key, environment)?;
-                let signature = &self.function_types[&instance.ir_function];
-                let inferred = infer_value_types(
-                    &body,
-                    &signature.parameters,
-                    &instance.key,
-                    environment,
-                    &remote,
-                )?;
-                let placeholder = declared[&instance.ir_function].result;
-                let results = body
-                    .blocks
-                    .iter()
-                    .filter_map(|block| {
-                        let ir::Terminator::Return(value) = block.terminator else {
-                            return None;
-                        };
-                        Some(inferred.types[value.index()])
-                    })
-                    .collect::<Vec<_>>();
-                let retained = results
-                    .iter()
-                    .copied()
-                    .find(|ty| *ty != placeholder)
-                    .or_else(|| results.first().copied());
-                let Some(retained) = retained else {
-                    continue;
-                };
-                // Initial call results can still carry the declared contract while
-                // a recursive callee is unresolved. The final IR verifier checks
-                // every returned value against the settled signature.
-                if results
-                    .iter()
-                    .any(|ty| *ty != retained && *ty != placeholder)
-                    || dereference_native_type(retained, environment)? == retained
-                {
-                    continue;
-                }
-                if signature.result != retained {
-                    updates.push((instance.ir_function, retained));
-                }
+pub(super) fn resolve_reference_results(
+    instances: &[NativeInstance],
+    environment: NativeIrEnvironment<'_>,
+    facts: &specialization::FlowFacts,
+) -> Result<HashMap<FunctionId, ir::Signature>, FosterError> {
+    let declared = environment.function_types;
+    let mut resolved = declared.clone();
+    // A caller can forward another function's returned reference. Settle those
+    // dependencies before emitting any caller; source conformance was checked
+    // independently, so a contract annotation never selects a pointee layout.
+    for _ in 0..=instances.len() {
+        let mut updates = Vec::new();
+        let environment = NativeIrEnvironment {
+            function_types: &resolved,
+            ..environment
+        };
+        for instance in instances {
+            let metadata = &environment.program.functions[&instance.key.function];
+            if !metadata.returns_reference {
+                continue;
             }
-            if updates.is_empty() {
-                return Ok(());
+            let source = &environment.program.bodies[&instance.key.function];
+            let states = &facts[&instance.key.function];
+            let body = legalize::inference_body(source, states, &instance.key, environment);
+            let remote = verified_remote_calls(&body, states, &instance.key, environment)?;
+            let signature = &resolved[&instance.ir_function];
+            let inferred = infer_value_types(
+                &body,
+                &signature.parameters,
+                &instance.key,
+                environment,
+                &remote,
+            )?;
+            let placeholder = declared[&instance.ir_function].result;
+            let results = body
+                .blocks
+                .iter()
+                .filter_map(|block| {
+                    let ir::Terminator::Return(value) = block.terminator else {
+                        return None;
+                    };
+                    Some(inferred.types[value.index()])
+                })
+                .collect::<Vec<_>>();
+            let retained = results
+                .iter()
+                .copied()
+                .find(|ty| *ty != placeholder)
+                .or_else(|| results.first().copied());
+            let Some(retained) = retained else {
+                continue;
+            };
+            // Initial call results can still carry the declared contract while
+            // a recursive callee is unresolved. The final IR verifier checks
+            // every returned value against the settled signature.
+            if results
+                .iter()
+                .any(|ty| *ty != retained && *ty != placeholder)
+                || dereference_native_type(retained, environment)? == retained
+            {
+                continue;
             }
-            for (function, result) in updates {
-                self.function_types.get_mut(&function).unwrap().result = result;
+            if signature.result != retained {
+                updates.push((instance.ir_function, retained));
             }
         }
-        Err(native_error(
-            "reference result layout inference did not converge",
-        ))
+        if updates.is_empty() {
+            return Ok(resolved);
+        }
+        for (function, result) in updates {
+            resolved.get_mut(&function).unwrap().result = result;
+        }
     }
+    Err(native_error(
+        "reference result layout inference did not converge",
+    ))
 }
 
 #[cfg(test)]

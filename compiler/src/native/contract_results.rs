@@ -108,7 +108,8 @@ pub(super) fn matches(
 }
 
 pub(super) fn collect_views(
-    prepared: &NativeProgram<'_>,
+    functions: &[legalize::FunctionRepresentations],
+    environment: NativeIrEnvironment<'_>,
 ) -> Result<HashMap<LayoutId, BTreeSet<LayoutId>>, FosterError> {
     fn record(
         actual: NativeType,
@@ -188,27 +189,63 @@ pub(super) fn collect_views(
     let mut views = HashMap::new();
     loop {
         let before = views.clone();
-        let mut env = prepared.environment();
+        let mut env = environment;
         env.contract_views = &before;
-        for function in &prepared.functions {
+        for function in functions {
+            let ty = |value: ir::Value| function.inferred.types[value.index()];
+            let mut conversion = |actual, expected| -> Result<(), FosterError> {
+                if matches!(
+                    legalize::ReturnConversion::between(actual, expected, env)?,
+                    Some(legalize::ReturnConversion::ContractView)
+                ) {
+                    record(actual, expected, env, &mut views);
+                }
+                Ok(())
+            };
+            // Lowering inserts conversions on returns and control-flow edges.
+            // Discover their storage requirements directly from inferred SSA.
+            conversion_arguments(
+                &function.body.entry_arguments,
+                &function.body.blocks[function.body.entry.0 as usize].parameters,
+                function,
+                &mut conversion,
+            )?;
+            for block in &function.body.blocks {
+                match &block.terminator {
+                    ir::Terminator::Return(value) => conversion(ty(*value), function.result)?,
+                    ir::Terminator::Jump { target, arguments } => conversion_arguments(
+                        arguments,
+                        &function.body.blocks[target.0 as usize].parameters,
+                        function,
+                        &mut conversion,
+                    )?,
+                    ir::Terminator::Branch {
+                        then_target,
+                        then_arguments,
+                        else_target,
+                        else_arguments,
+                        ..
+                    } => {
+                        for (target, arguments) in
+                            [(then_target, then_arguments), (else_target, else_arguments)]
+                        {
+                            conversion_arguments(
+                                arguments,
+                                &function.body.blocks[target.0 as usize].parameters,
+                                function,
+                                &mut conversion,
+                            )?;
+                        }
+                    }
+                    ir::Terminator::Unreachable => {}
+                }
+            }
             for entry in function
-                .ir
+                .body
                 .blocks
                 .iter()
                 .flat_map(|block| &block.instructions)
             {
-                if let ir::Instruction::ContractView {
-                    destination,
-                    source,
-                } = entry.instruction
-                {
-                    record(
-                        function.ir.value_type(source),
-                        function.ir.value_type(destination),
-                        env,
-                        &mut views,
-                    );
-                }
                 if let ir::Instruction::Portable(Instruction::CallContractMethod {
                     destination,
                     receiver,
@@ -219,17 +256,22 @@ pub(super) fn collect_views(
                 {
                     let arguments = arguments
                         .iter()
-                        .map(|argument| function.ir.value_type(*argument))
+                        .map(|argument| ty(*argument))
                         .collect::<Vec<_>>();
-                    for candidate in contract_candidates(
-                        *slot,
-                        dereference_native_type(function.ir.value_type(*receiver), env)?,
-                        &arguments,
-                        env,
-                    )? {
+                    let receiver = dereference_native_type(ty(*receiver), env)?;
+                    let candidates = contract_candidates(*slot, receiver, &arguments, env)?;
+                    // Dispatch observes the argument ABI chosen by legalization,
+                    // including boxing and callable wrappers, rather than the
+                    // original source-value representations.
+                    let arguments = candidates
+                        .first()
+                        .map_or(arguments.as_slice(), |candidate| {
+                            &env.function_types[&candidate.function].parameters[1..]
+                        });
+                    for candidate in contract_candidates(*slot, receiver, arguments, env)? {
                         record(
                             env.function_types[&candidate.function].result,
-                            function.ir.value_type(*destination),
+                            ty(*destination),
                             env,
                             &mut views,
                         );
@@ -257,10 +299,72 @@ pub(super) fn collect_views(
     }
 }
 
-pub(super) fn erased_fields(prepared: &NativeProgram<'_>) -> BTreeSet<(LayoutId, String)> {
+// Empty tokens have no runtime storage and are retyped rather than converted.
+fn conversion_arguments(
+    arguments: &[ir::Value],
+    parameters: &[ir::Value],
+    function: &legalize::FunctionRepresentations,
+    conversion: &mut impl FnMut(NativeType, NativeType) -> Result<(), FosterError>,
+) -> Result<(), FosterError> {
+    for (argument, parameter) in arguments.iter().zip(parameters) {
+        if !function.inferred.empty.contains(argument)
+            && !function.body.entry_seeds.contains(argument)
+        {
+            conversion(
+                function.inferred.types[argument.index()],
+                function.inferred.types[parameter.index()],
+            )?;
+        }
+    }
+    Ok(())
+}
+
+/// ContractView's generic SSA check only establishes pointer-shaped operands.
+/// Native verification must also establish that descriptor-based access was planned.
+pub(super) fn verify(
+    function: &ir::Function,
+    environment: NativeIrEnvironment<'_>,
+) -> Result<(), FosterError> {
+    for entry in function.blocks.iter().flat_map(|block| &block.instructions) {
+        let ir::Instruction::ContractView {
+            source,
+            destination,
+        } = entry.instruction
+        else {
+            continue;
+        };
+        let actual = function.value_type(source);
+        let expected = function.value_type(destination);
+        if !matches(actual, expected, environment) {
+            return Err(native_error(format!(
+                "invalid contract view in `{}`: {actual:?} to {expected:?}",
+                function.name
+            )));
+        }
+        let actual = dereference_native_type(actual, environment)?;
+        let expected = dereference_native_type(expected, environment)?;
+        if actual != expected
+            && let (NativeType::Object(actual), NativeType::Object(expected)) = (actual, expected)
+            && !matches!(environment.layouts.get(actual).kind, LayoutKind::Opaque)
+            && !matches!(environment.layouts.get(expected).kind, LayoutKind::Opaque)
+            && !environment
+                .contract_views
+                .get(&expected)
+                .is_some_and(|layouts| layouts.contains(&actual))
+        {
+            return Err(native_error(format!(
+                "unplanned contract view in `{}`: l{} to l{}",
+                function.name, actual.0, expected.0
+            )));
+        }
+    }
+    Ok(())
+}
+
+pub(super) fn erased_fields(environment: NativeIrEnvironment<'_>) -> BTreeSet<(LayoutId, String)> {
     let mut fields = BTreeSet::new();
-    let opaque = prepared.layouts.opaque();
-    for (&expected, actuals) in &prepared.contract_views {
+    let opaque = environment.layouts.opaque();
+    for (&expected, actuals) in environment.contract_views {
         for &actual in actuals {
             let mut compare = |actual_fields: &[crate::codegen::layout::physical::FieldLayout], expected_fields: &[crate::codegen::layout::physical::FieldLayout]| {
                 for expected in expected_fields {
@@ -272,8 +376,8 @@ pub(super) fn erased_fields(prepared: &NativeProgram<'_>) -> BTreeSet<(LayoutId,
                 }
             };
             match (
-                &prepared.physical_layouts.get(actual).kind,
-                &prepared.physical_layouts.get(expected).kind,
+                &environment.physical_layouts.get(actual).kind,
+                &environment.physical_layouts.get(expected).kind,
             ) {
                 (
                     PhysicalKind::Record { fields: a, .. },

@@ -301,6 +301,9 @@ unchanged functions; changed functions receive fresh analysis evidence. Native p
 the layout registry because specialization adds layouts. The retained canonical graph still allows
 the other optimization mode to be prepared without reconstructing bytecode or repeating the frontend.
 Cranelift performs machine-specific optimization after native representation and ABI lowering.
+Native preparation infers SSA representations and contract views first, then finalizes field
+storage and physical layouts. ABI lowering and verification use that frozen registry;
+native verification rejects contract-view conversions missing from the storage plan.
 Each prepared function retains its specialized logical signature and parameter ownership modes,
 compact verified logical alternatives by original SSA value, and a per-value memory-management
 classification. This preserves distinctions such as String versus Symbol after both become pointers.

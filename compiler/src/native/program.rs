@@ -166,6 +166,55 @@ fn prepare_shared(
     validate_program(compilation, &program, &instances, &function_types, &layouts)?;
     let (runtime_strings, runtime_string_indices, runtime_literal_indices) =
         runtime_strings(&program);
+    // Inference may inspect provisional layouts, but no native instructions are
+    // emitted until contract views and their field storage have been settled.
+    let empty_views = HashMap::new();
+    let environment = NativeIrEnvironment {
+        compilation,
+        program: &program,
+        function_types: &function_types,
+        runtime_string_indices: &runtime_string_indices,
+        runtime_literal_indices: &runtime_literal_indices,
+        layouts: &layouts,
+        physical_layouts: &physical_layouts,
+        instances: &instance_ids,
+        builtin_result_types: &builtin_result_types,
+        contract_views: &empty_views,
+    };
+    let function_types =
+        reference_results::resolve_reference_results(&instances, environment, facts)?;
+    let environment = NativeIrEnvironment {
+        function_types: &function_types,
+        ..environment
+    };
+    let representations = crate::compiler::profile::measure("native.representations", || {
+        instances
+            .iter()
+            .map(|instance| {
+                legalize::plan_function(
+                    &program.bodies[&instance.key.function],
+                    &facts[&instance.key.function],
+                    &function_types[&instance.ir_function],
+                    &instance.key,
+                    environment,
+                )
+            })
+            .collect::<Result<Vec<_>, FosterError>>()
+    })?;
+    let contract_views = super::contract_results::collect_views(&representations, environment)?;
+    let environment = NativeIrEnvironment {
+        contract_views: &contract_views,
+        ..environment
+    };
+    let erased_fields = super::contract_results::erased_fields(environment);
+    let physical_layouts = if erased_fields.is_empty() {
+        physical_layouts
+    } else {
+        PhysicalRegistry::build_with_erased_fields(&layouts, TargetLayout::host(), &erased_fields)
+            .map_err(|error| {
+            native_error(format!("cannot calculate contract field layouts: {error}"))
+        })?
+    };
     let mut prepared = NativeProgram {
         canonical: canonical.clone(),
         optimized,
@@ -183,19 +232,17 @@ fn prepare_shared(
         runtime_string_indices,
         runtime_literal_indices,
         functions: Vec::new(),
-        contract_views: HashMap::new(),
+        contract_views,
     };
-    prepared.resolve_reference_results(facts)?;
-    for instance in &prepared.instances {
+    for (instance, representations) in prepared.instances.iter().zip(representations) {
         let source = &prepared.program.functions[&instance.key.function];
         let source_states = &facts[&instance.key.function];
         let environment = prepared.environment();
         let (mut lowered, mut failure_cleanup) =
             crate::compiler::profile::measure("native.lower", || {
                 lower_shared_to_native_ir(
-                    &prepared.program.bodies[&instance.key.function],
+                    representations,
                     source,
-                    source_states,
                     &prepared.function_types[&instance.ir_function],
                     &instance.key,
                     environment,
@@ -207,6 +254,7 @@ fn prepare_shared(
         lowered.verify(&prepared.function_types).map_err(|error| {
             native_error(format!("invalid native IR for `{}`: {error}", source.name))
         })?;
+        super::contract_results::verify(&lowered, environment)?;
         for instruction in lowered.blocks.iter().flat_map(|block| &block.instructions) {
             if let ir::Instruction::RuntimeCall {
                 helper, signature, ..
@@ -294,18 +342,6 @@ fn prepare_shared(
             },
             logical_value_types,
         });
-    }
-    prepared.contract_views = super::contract_results::collect_views(&prepared)?;
-    let erased_fields = super::contract_results::erased_fields(&prepared);
-    if !erased_fields.is_empty() {
-        prepared.physical_layouts = PhysicalRegistry::build_with_erased_fields(
-            &prepared.layouts,
-            TargetLayout::host(),
-            &erased_fields,
-        )
-        .map_err(|error| {
-            native_error(format!("cannot calculate contract field layouts: {error}"))
-        })?;
     }
     Ok(prepared)
 }
@@ -395,6 +431,113 @@ impl NativeProgram<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn contract_storage_is_planned_from_portable_ssa_before_lowering() {
+        let compilation = crate::compile(include_str!(
+            "../../../tests/fixtures/programs/contract_owned_results.fos"
+        ))
+        .unwrap();
+        for optimize in [false, true] {
+            let prepared = prepare_with_options(&compilation, CompileOptions { optimize }).unwrap();
+            let shared = compilation.shared_program(optimize).unwrap();
+            let (_, facts) = reference_results::retained_reference_flow(&shared).unwrap();
+            let provisional =
+                PhysicalRegistry::build(&prepared.layouts, TargetLayout::host()).unwrap();
+            let empty = HashMap::new();
+            let environment = NativeIrEnvironment {
+                physical_layouts: &provisional,
+                contract_views: &empty,
+                ..prepared.environment()
+            };
+            let plans = prepared
+                .instances
+                .iter()
+                .map(|instance| {
+                    legalize::plan_function(
+                        &prepared.program.bodies[&instance.key.function],
+                        &facts[&instance.key.function],
+                        &prepared.function_types[&instance.ir_function],
+                        &instance.key,
+                        environment,
+                    )
+                    .unwrap()
+                })
+                .collect::<Vec<_>>();
+            assert!(
+                plans
+                    .iter()
+                    .flat_map(|plan| &plan.body.blocks)
+                    .flat_map(|block| &block.instructions)
+                    .all(|entry| matches!(entry.instruction, ir::Instruction::Portable(_)))
+            );
+            let views = super::super::contract_results::collect_views(&plans, environment).unwrap();
+            assert_eq!(views, prepared.contract_views);
+            let environment = NativeIrEnvironment {
+                contract_views: &views,
+                ..environment
+            };
+            let erased = super::super::contract_results::erased_fields(environment);
+            assert!(!erased.is_empty());
+            assert_ne!(provisional, prepared.physical_layouts);
+            assert_eq!(
+                PhysicalRegistry::build_with_erased_fields(
+                    &prepared.layouts,
+                    TargetLayout::host(),
+                    &erased
+                )
+                .unwrap(),
+                prepared.physical_layouts
+            );
+
+            // Selecting physical storage must not change source-value representations.
+            for (instance, plan) in prepared.instances.iter().zip(plans) {
+                let final_plan = legalize::plan_function(
+                    &prepared.program.bodies[&instance.key.function],
+                    &facts[&instance.key.function],
+                    &prepared.function_types[&instance.ir_function],
+                    &instance.key,
+                    prepared.environment(),
+                )
+                .unwrap();
+                assert_eq!(plan.inferred, final_plan.inferred);
+            }
+        }
+    }
+
+    #[test]
+    fn native_verification_rejects_unplanned_contract_views() {
+        let compilation = crate::compile(include_str!(
+            "../../../tests/fixtures/programs/contract_owned_results.fos"
+        ))
+        .unwrap();
+        for optimize in [false, true] {
+            let prepared = prepare_with_options(&compilation, CompileOptions { optimize }).unwrap();
+            let empty = HashMap::new();
+            let environment = NativeIrEnvironment {
+                contract_views: &empty,
+                ..prepared.environment()
+            };
+            let function = prepared
+                .functions
+                .iter()
+                .find(|function| {
+                    function
+                        .ir
+                        .blocks
+                        .iter()
+                        .flat_map(|block| &block.instructions)
+                        .any(|entry| {
+                            matches!(entry.instruction, ir::Instruction::ContractView { .. })
+                        })
+                })
+                .unwrap();
+            function.ir.verify(&prepared.function_types).unwrap();
+            let error =
+                super::super::contract_results::verify(&function.ir, environment).unwrap_err();
+            assert!(error.message.contains("unplanned contract view"), "{error}");
+        }
+    }
 
     #[test]
     fn native_cleanup_preserves_vm_and_avoids_nonaddressable_stack_homes() {
