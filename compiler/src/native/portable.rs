@@ -240,42 +240,66 @@ pub(super) fn lower_portable_native(
                 .ins()
                 .brif(unique, ready, &[source.into()], detach, &[]);
             builder.switch_to_block(detach);
-            let copied = match &physical.kind {
-                PhysicalKind::Record { fields, .. } => {
-                    let copied = objects.allocate(builder, module, layout)?;
-                    if contract_candidates(crate::types::DEINIT_SLOT, object_type, &[], backend.ir)?
-                        .iter()
-                        .any(|candidate| candidate.layout == layout)
-                    {
-                        let inactive = builder.ins().iconst(types::I32, 1);
-                        store_physical_value(
-                            builder,
-                            source,
-                            physical.header.flags_offset,
-                            inactive,
-                        );
-                    }
-                    for field in fields {
-                        let value =
-                            load_physical_value(builder, module, source, field.offset, field.value);
-                        if let Some(pointee) = field.value.pointee
-                            && objects.layouts.is_managed(pointee)
-                        {
-                            objects.retain(builder, value, pointee);
+            let copied = super::contract_results::with_layout(
+                builder,
+                module,
+                source,
+                layout,
+                &[object_type],
+                backend,
+                |builder, module, actual| {
+                    let physical = objects.layouts.physical.get(actual);
+                    let layout = actual;
+                    let object_type = NativeType::Object(actual);
+                    let copied = match &physical.kind {
+                        PhysicalKind::Record { fields, .. } => {
+                            let copied = objects.allocate(builder, module, layout)?;
+                            if contract_candidates(
+                                crate::types::DEINIT_SLOT,
+                                object_type,
+                                &[],
+                                backend.ir,
+                            )?
+                            .iter()
+                            .any(|candidate| candidate.layout == layout)
+                            {
+                                let inactive = builder.ins().iconst(types::I32, 1);
+                                store_physical_value(
+                                    builder,
+                                    source,
+                                    physical.header.flags_offset,
+                                    inactive,
+                                );
+                            }
+                            for field in fields {
+                                let value = load_physical_value(
+                                    builder,
+                                    module,
+                                    source,
+                                    field.offset,
+                                    field.value,
+                                );
+                                if let Some(pointee) = field.value.pointee
+                                    && objects.layouts.is_managed(pointee)
+                                {
+                                    objects.retain(builder, value, pointee);
+                                }
+                                store_physical_value(builder, copied, field.offset, value);
+                            }
+                            copied
                         }
-                        store_physical_value(builder, copied, field.offset, value);
-                    }
-                    copied
-                }
-                PhysicalKind::Buffer { .. } => {
-                    clone_native_buffer(builder, module, source, layout, objects)?
-                }
-                _ => {
-                    return Err(native_error(
-                        "native copy-on-write requires a record or buffer layout",
-                    ));
-                }
-            };
+                        PhysicalKind::Buffer { .. } => {
+                            clone_native_buffer(builder, module, source, layout, objects)?
+                        }
+                        _ => {
+                            return Err(native_error(
+                                "native copy-on-write requires a record or buffer layout",
+                            ));
+                        }
+                    };
+                    Ok(vec![copied])
+                },
+            )?[0];
             objects.release(builder, module, source, layout)?;
             builder.ins().jump(ready, &[copied.into()]);
             builder.switch_to_block(ready);
@@ -557,8 +581,14 @@ pub(super) fn lower_portable_native(
             )?;
             Ok(Some(address))
         }
-        ir::PortableInstruction::MakeFieldReference { object, field, .. }
+        ir::PortableInstruction::MakeFieldReference {
+            destination,
+            object,
+            field,
+            ..
+        }
         | ir::PortableInstruction::LoadField {
+            destination,
             object,
             field,
             by_reference: true,
@@ -574,22 +604,58 @@ pub(super) fn lower_portable_native(
             let NativeType::Object(layout) = object_type else {
                 return Err(native_error("field reference requires a native record"));
             };
-            let LayoutKind::Record { fields, .. } = &objects.layouts.logical.get(layout).kind
-            else {
-                return Err(native_error("field reference requires a native record"));
-            };
-            let slot = fields
-                .iter()
-                .find(|slot| slot.name == *field)
-                .ok_or_else(|| native_error(format!("record has no field `{field}`")))?;
-            let physical = objects
-                .layouts
-                .physical
-                .record_field(layout, slot.index)
-                .ok_or_else(|| native_error("record field has no physical slot"))?;
-            Ok(Some(
-                builder.ins().iadd_imm_s(object, i64::from(physical.offset)),
-            ))
+            super::contract_results::with_layout(
+                builder,
+                module,
+                object,
+                layout,
+                &[NativeType::Opaque],
+                backend,
+                |builder, module, actual| {
+                    let LayoutKind::Record { fields, .. } =
+                        &objects.layouts.logical.get(actual).kind
+                    else {
+                        return Err(native_error("field reference requires a native record"));
+                    };
+                    let slot = fields
+                        .iter()
+                        .find(|slot| slot.name == *field)
+                        .ok_or_else(|| native_error(format!("record has no field `{field}`")))?;
+                    let physical = objects
+                        .layouts
+                        .physical
+                        .record_field(actual, slot.index)
+                        .ok_or_else(|| native_error("record field has no physical slot"))?;
+                    let address = builder.ins().iadd_imm_s(object, i64::from(physical.offset));
+                    let pointee = super::dereference_native_type(
+                        function.value_type(*destination),
+                        backend.ir,
+                    )?;
+                    let address = if physical.value.pointee == Some(backend.ir.layouts.opaque())
+                        && pointee != NativeType::Object(backend.ir.layouts.opaque())
+                    {
+                        let boxed = builder.ins().load(
+                            module.target_config().pointer_type(),
+                            MemFlagsData::trusted(),
+                            address,
+                            0,
+                        );
+                        let PhysicalKind::Opaque { value_offset, .. } = backend
+                            .ir
+                            .physical_layouts
+                            .get(backend.ir.layouts.opaque())
+                            .kind
+                        else {
+                            unreachable!()
+                        };
+                        builder.ins().iadd_imm_s(boxed, i64::from(value_offset))
+                    } else {
+                        address
+                    };
+                    Ok(vec![address])
+                },
+            )
+            .map(|values| Some(values[0]))
         }
         ir::PortableInstruction::MoveOut {
             destination,
@@ -668,6 +734,14 @@ pub(super) fn lower_portable_native(
                 {
                     objects.retain(builder, value, pointee);
                 }
+                let value = dispatch::adapt_result(
+                    builder,
+                    module,
+                    value,
+                    function.value_type(*source),
+                    dispatch::field_native_type(field.value),
+                    backend,
+                )?;
                 store_physical_value(builder, object, field.offset, value);
             }
             Ok(Some(object))
@@ -720,6 +794,14 @@ pub(super) fn lower_portable_native(
                 {
                     objects.retain(builder, value, pointee);
                 }
+                let value = dispatch::adapt_result(
+                    builder,
+                    module,
+                    value,
+                    function.value_type(*source),
+                    dispatch::field_native_type(field.value),
+                    backend,
+                )?;
                 store_physical_value(builder, object, field.offset, value);
             }
             Ok(Some(object))
@@ -942,6 +1024,7 @@ pub(super) fn lower_portable_native(
                 function.value_type(*destination),
                 field,
                 objects,
+                backend,
             )
             .map(Some)
         }
@@ -960,38 +1043,65 @@ pub(super) fn lower_portable_native(
             let NativeType::Object(layout) = receiver_type else {
                 return Err(native_error("native field store requires a Foster object"));
             };
-            let LayoutKind::Record { fields, .. } = &objects.layouts.logical.get(layout).kind
-            else {
-                return Err(native_error("native field store requires a record"));
-            };
-            let slot = fields
-                .iter()
-                .find(|slot| slot.name == *field)
-                .ok_or_else(|| native_error(format!("record has no field `{field}`")))?;
-            let physical = objects
-                .layouts
-                .physical
-                .record_field(layout, slot.index)
-                .ok_or_else(|| native_error("record field has no physical slot"))?;
-            if let Some(pointee) = physical.value.pointee
-                && objects.layouts.is_managed(pointee)
-            {
-                let old =
-                    load_physical_value(builder, module, receiver, physical.offset, physical.value);
-                objects.release(builder, module, old, pointee)?;
-            }
-            let source_value = get(source);
-            if let Some(pointee) = objects.layouts.managed_layout(function.value_type(*source)) {
-                objects.retain(builder, source_value, pointee);
-            }
-            store_physical_value(builder, receiver, physical.offset, source_value);
-            let initialized = builder.ins().iconst(types::I8, 1);
-            store_physical_value(
+            super::contract_results::with_layout(
                 builder,
+                module,
                 receiver,
-                objects.layouts.physical.get(layout).header.size + slot.index,
-                initialized,
-            );
+                layout,
+                &[],
+                backend,
+                |builder, module, actual| {
+                    let LayoutKind::Record { fields, .. } =
+                        &objects.layouts.logical.get(actual).kind
+                    else {
+                        return Err(native_error("native field store requires a record"));
+                    };
+                    let slot = fields
+                        .iter()
+                        .find(|slot| slot.name == *field)
+                        .ok_or_else(|| native_error(format!("record has no field `{field}`")))?;
+                    let physical = objects
+                        .layouts
+                        .physical
+                        .record_field(actual, slot.index)
+                        .ok_or_else(|| native_error("record field has no physical slot"))?;
+                    if let Some(pointee) = physical.value.pointee
+                        && objects.layouts.is_managed(pointee)
+                    {
+                        let old = load_physical_value(
+                            builder,
+                            module,
+                            receiver,
+                            physical.offset,
+                            physical.value,
+                        );
+                        objects.release(builder, module, old, pointee)?;
+                    }
+                    let source_value = get(source);
+                    if let Some(pointee) =
+                        objects.layouts.managed_layout(function.value_type(*source))
+                    {
+                        objects.retain(builder, source_value, pointee);
+                    }
+                    let source_value = dispatch::adapt_result(
+                        builder,
+                        module,
+                        source_value,
+                        function.value_type(*source),
+                        dispatch::field_native_type(physical.value),
+                        backend,
+                    )?;
+                    store_physical_value(builder, receiver, physical.offset, source_value);
+                    let initialized = builder.ins().iconst(types::I8, 1);
+                    store_physical_value(
+                        builder,
+                        receiver,
+                        objects.layouts.physical.get(actual).header.size + slot.index,
+                        initialized,
+                    );
+                    Ok(vec![])
+                },
+            )?;
             Ok(None)
         }
         ir::PortableInstruction::Builtin {

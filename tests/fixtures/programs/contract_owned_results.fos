@@ -1,0 +1,170 @@
+import core.option.Option
+import core.list.List
+
+pub type Answer = {
+    pub func answer() -> Int [read self]
+}
+pub type Envelope<T> = {
+    pub value: T
+}
+impl Envelope<T> {
+    func deinit() -> () {
+        println("drop envelope")
+    }
+}
+pub type Pair<T, B> = {
+    pub value: T, pub borrowed: B
+}
+impl Pair<T, B> {
+    func deinit() -> () {
+        println("drop pair")
+    }
+}
+pub type Provider = & Answer & {
+    pub func maybe(flag: Bool) -> Option<Self>
+    pub func build() -> Envelope<Self>
+    pub func pair(number: Int) -> Pair<Self, ref[number] Int>
+}
+pub type FirstProvider = & Provider & {
+    pub number: Int
+}
+impl FirstProvider {
+    pub func maybe(flag: Bool) -> Option<FirstProvider> {
+        branch {
+            flag -> Option.Some(FirstProvider {
+                number: self.number
+            }) _ -> Option.None
+        }
+    }
+    pub func answer() -> Int {
+        self.number
+    }
+    pub func build() -> Envelope<FirstProvider> {
+        Envelope {
+            value: FirstProvider {
+                number: self.number
+            }
+        }
+    }
+    pub func pair(number: Int) -> Pair<FirstProvider, ref[number] Int> {
+        Pair {
+            value: FirstProvider {
+                number: self.number
+            }, borrowed: ref number
+        }
+    }
+}
+pub type SecondProvider = & Provider & {
+    pub extra: String, pub number: Int
+}
+impl SecondProvider {
+    pub func maybe(flag: Bool) -> Option<SecondProvider> {
+        branch {
+            flag -> Option.Some(SecondProvider {
+                extra: "option", number: self.number
+            }) _ -> Option.None
+        }
+    }
+    pub func answer() -> Int {
+        self.number
+    }
+    pub func build() -> Envelope<SecondProvider> {
+        Envelope {
+            value: SecondProvider {
+                extra: "retained", number: self.number
+            }
+        }
+    }
+    pub func pair(number: Int) -> Pair<SecondProvider, ref[number] Int> {
+        Pair {
+            value: SecondProvider {
+                extra: "borrowed", number: self.number
+            }, borrowed: ref number
+        }
+    }
+}
+func build(provider: Provider) -> Envelope<Provider> {
+    provider.build()
+}
+func pair(provider: Provider, number: Int) -> Pair<Provider, ref[number] Int> {
+    provider.pair(number)
+}
+func forwarded(provider: Provider, number: Int) -> Pair<Provider, ref[number] Int> {
+    pair(provider, number)
+}
+pub type Narrow = {
+    pub number: Int, pub values: List<Int>
+}
+pub type Wide = {
+    pub extra: String, pub number: Int, pub values: List<Int>
+}
+impl Wide {
+    func deinit() -> () {
+        println("drop wide")
+    }
+}
+func narrowed() -> Narrow {
+    Wide {
+        extra: "original storage", number: 40, values: [42]
+    }
+}
+func increase(value: Narrow) -> () {
+    value.number = value.number + 1
+    ()
+}
+func inspect(value: Narrow, index: Int) -> Int {
+    value.values[index]
+}
+func maybe(provider: Provider, flag: Bool) -> Option<Provider> {
+    provider.maybe(flag)
+}
+func check_view() -> () {
+    let original = narrowed()
+    assert(inspect(original, 0) == 42)
+    assert(original.number == 40)
+    original.number = original.number + 1
+    increase(original)
+    assert(original.number == 42)
+    let borrowed = ref original
+    let {
+        number: observed
+    } = borrowed
+    assert(observed.copy() == 42)
+    let {
+        number
+    } = original
+    assert(number == 42)
+    println("viewed")
+}
+func main() -> Int {
+    check_view()
+    branch maybe(FirstProvider {
+        number: 42
+    }, true) {
+        Option.Some(value) -> {
+            assert(value.answer() == 42)
+        }
+        Option.None -> panic("missing first value")
+    }
+    branch maybe(SecondProvider {
+        extra: "empty", number: 0
+    }, false) {
+        Option.Some(_) -> panic("unexpected second value")
+        Option.None -> ()
+    }
+    let first = build(FirstProvider {
+        number: 20
+    })
+    let second = build(SecondProvider {
+        extra: "second", number: 22
+    })
+    assert(first.value.answer() + second.value.answer() == 42)
+    println("returned")
+    let number = 42
+    let result = forwarded(SecondProvider {
+        extra: "source", number: 42
+    }, number)
+    assert(result.borrowed.copy() == 42)
+    assert(result.value.answer() == 42)
+    42
+}

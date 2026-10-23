@@ -135,8 +135,9 @@ use the target pointer type. It supports:
   payloads and type-specific release thunks;
 - receiver-dependent pop results for `Queue`, `Deque`, and `Stack`, including owned payloads
   and concrete remainders viewed through the corresponding structural contract. Native dispatch
-  rebuilds matching record/enum containers when their nested contract representation changes;
-  this conversion is bounded and excludes containers with custom destructors or borrowed fields;
+  preserves the original returned record/enum containers. Contract views use their original
+  descriptors for field and pattern access and cleanup, including containers with custom
+  destructors or borrowed fields;
 - whole, indexed, and field references lowered as typed addresses, including typed reference
   parameters, load/store, move-out, and mutation observed through a closure capture;
 - reference results retain their verified storage layouts through forwarding and specialization;

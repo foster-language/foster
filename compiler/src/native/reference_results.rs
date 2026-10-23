@@ -260,6 +260,45 @@ impl NativeProgram<'_> {
 
 #[cfg(test)]
 mod tests {
+    const OWNED: &str = include_str!("../../../tests/fixtures/programs/contract_owned_results.fos");
+
+    #[test]
+    fn owned_contract_results_keep_original_items() {
+        let compilation = crate::compile(OWNED).unwrap();
+        assert_eq!(
+            crate::vm::run(&compilation).unwrap(),
+            crate::vm::Value::Integer(42)
+        );
+        for optimize in [false, true] {
+            let options = crate::native::CompileOptions { optimize };
+            let prepared = crate::native::prepare_with_options(&compilation, options).unwrap();
+            if optimize {
+                assert!(prepared.emit_ir().contains("borrowed_field_index"));
+            }
+            prepared.compile_object(options).unwrap();
+        }
+    }
+
+    #[test]
+    fn owned_contract_results_keep_annotation_visibility_and_loan_checks() {
+        let hidden = OWNED.replace(
+            "result.value.answer() == 42",
+            "result.value.extra == \"source\"",
+        );
+        assert!(
+            crate::compile(&hidden)
+                .unwrap_err()
+                .message
+                .contains("extra")
+        );
+        let invalidated = OWNED.replace(
+            "    assert(result.borrowed.copy()",
+            "    number = 0\n    assert(result.borrowed.copy()",
+        );
+        let error = crate::compile(&invalidated).unwrap_err();
+        assert_eq!(error.code.as_deref(), Some("E0401"), "{error}");
+    }
+
     const SOURCE: &str =
         include_str!("../../../tests/fixtures/programs/contract_reference_results.fos");
 

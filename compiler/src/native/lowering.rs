@@ -171,6 +171,7 @@ pub(super) fn lower_native_ir(
                 bindings,
             }) = &instruction.instruction
             {
+                let mut owned_bindings = HashSet::new();
                 let (matched, lowered_bindings) = lower_native_pattern(
                     builder,
                     module,
@@ -182,6 +183,7 @@ pub(super) fn lower_native_ir(
                     backend.objects,
                     backend.ir.runtime_literal_indices,
                     backend,
+                    &mut owned_bindings,
                 )?;
                 if lowered_bindings.len() != bindings.len() {
                     return Err(native_error(
@@ -198,6 +200,8 @@ pub(super) fn lower_native_ir(
                     } else {
                         builder.ins().iconst(ty, 0)
                     };
+                    let original = value;
+                    let already_owned = owned_bindings.contains(&value);
                     let value = builder.ins().select(matched, value, zero);
                     if let Some(layout) = backend
                         .objects
@@ -206,9 +210,17 @@ pub(super) fn lower_native_ir(
                     {
                         let retain = builder.create_block();
                         let finish = builder.create_block();
-                        builder.ins().brif(matched, retain, &[], finish, &[]);
+                        if already_owned {
+                            builder.ins().brif(matched, finish, &[], retain, &[]);
+                        } else {
+                            builder.ins().brif(matched, retain, &[], finish, &[]);
+                        }
                         builder.switch_to_block(retain);
-                        backend.objects.retain(builder, value, layout);
+                        if already_owned {
+                            backend.objects.release(builder, module, original, layout)?;
+                        } else {
+                            backend.objects.retain(builder, value, layout);
+                        }
                         builder.ins().jump(finish, &[]);
                         builder.switch_to_block(finish);
                     }
@@ -290,6 +302,7 @@ pub(super) fn lower_native_ir(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn lower_native_pattern(
     builder: &mut FunctionBuilder<'_>,
     module: &mut ObjectModule,
@@ -298,9 +311,110 @@ fn lower_native_pattern(
     objects: ObjectRuntime<'_>,
     runtime_literal_indices: &HashMap<String, u64>,
     backend: &NativeBackend<'_>,
+    owned_bindings: &mut HashSet<ClifValue>,
+) -> Result<(ClifValue, Vec<ClifValue>), FosterError> {
+    let pointee = super::dereference_native_type(subject.ty, backend.ir)?;
+    let borrowed = pointee != subject.ty;
+    if let NativeType::Object(layout) = pointee
+        && backend.ir.contract_views.contains_key(&layout)
+        && matches!(
+            pattern.unspanned(),
+            Pattern::Record { .. } | Pattern::Variant { .. }
+        )
+    {
+        let (object, _) =
+            super::native_reference_receiver(builder, module, subject.value, subject.ty, backend)?;
+        let mut expected = Vec::new();
+        super::inference::native_pattern_binding_types(
+            &backend.ir.program.metadata,
+            backend.ir.layouts,
+            backend.ir.physical_layouts,
+            pattern,
+            subject.ty,
+            &mut expected,
+        )?;
+        let results = std::iter::once(NativeType::Bool)
+            .chain(expected.iter().copied())
+            .collect::<Vec<_>>();
+        let values = super::contract_results::with_layout(
+            builder,
+            module,
+            object,
+            layout,
+            &results,
+            backend,
+            |builder, module, actual| {
+                let actual_subject = PatternSubject {
+                    value: object,
+                    ty: NativeType::Object(actual),
+                };
+                let mut actual_types = Vec::new();
+                super::inference::native_pattern_binding_types_with_borrow(
+                    &backend.ir.program.metadata,
+                    backend.ir.layouts,
+                    backend.ir.physical_layouts,
+                    pattern,
+                    actual_subject.ty,
+                    &mut actual_types,
+                    borrowed,
+                )?;
+                let (matched, bindings) = lower_native_pattern_static(
+                    builder,
+                    module,
+                    actual_subject,
+                    pattern,
+                    objects,
+                    runtime_literal_indices,
+                    backend,
+                    owned_bindings,
+                    borrowed,
+                )?;
+                let mut values = vec![matched];
+                for ((value, actual), expected) in
+                    bindings.into_iter().zip(actual_types).zip(&expected)
+                {
+                    if !owned_bindings.contains(&value)
+                        && let Some(layout) = backend.objects.layouts.managed_layout(actual)
+                    {
+                        backend.objects.retain(builder, value, layout);
+                    }
+                    values.push(super::dispatch::adapt_result(
+                        builder, module, value, actual, *expected, backend,
+                    )?);
+                }
+                Ok(values)
+            },
+        )?;
+        owned_bindings.extend(values[1..].iter().copied());
+        return Ok((values[0], values[1..].to_vec()));
+    }
+    lower_native_pattern_static(
+        builder,
+        module,
+        subject,
+        pattern,
+        objects,
+        runtime_literal_indices,
+        backend,
+        owned_bindings,
+        false,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn lower_native_pattern_static(
+    builder: &mut FunctionBuilder<'_>,
+    module: &mut ObjectModule,
+    subject: PatternSubject,
+    pattern: &Pattern,
+    objects: ObjectRuntime<'_>,
+    runtime_literal_indices: &HashMap<String, u64>,
+    backend: &NativeBackend<'_>,
+    owned_bindings: &mut HashSet<ClifValue>,
+    borrow: bool,
 ) -> Result<(ClifValue, Vec<ClifValue>), FosterError> {
     let layouts = objects.layouts;
-    let borrowed = super::dereference_native_type(subject.ty, backend.ir)? != subject.ty;
+    let borrowed = borrow || super::dereference_native_type(subject.ty, backend.ir)? != subject.ty;
     let subject = if borrowed && !matches!(pattern.unspanned(), Pattern::Binding(_)) {
         let (value, ty) =
             super::native_reference_receiver(builder, module, subject.value, subject.ty, backend)?;
@@ -364,6 +478,7 @@ fn lower_native_pattern(
                                 objects,
                                 runtime_literal_indices,
                                 backend,
+                                owned_bindings,
                             )?;
                             matched = builder.ins().bor(matched, accepts);
                         }
@@ -383,6 +498,7 @@ fn lower_native_pattern(
                         objects,
                         runtime_literal_indices,
                         backend,
+                        owned_bindings,
                     )?;
                     matched = builder.ins().bor(matched, accepts);
                 }
@@ -402,6 +518,7 @@ fn lower_native_pattern(
                             objects,
                             runtime_literal_indices,
                             backend,
+                            owned_bindings,
                         )?
                         .1
                     }
@@ -619,6 +736,7 @@ fn lower_native_pattern(
                     objects,
                     runtime_literal_indices,
                     backend,
+                    owned_bindings,
                 )?;
                 matched = builder.ins().band(matched, field_matched);
                 bindings.append(&mut field_bindings);
@@ -696,6 +814,7 @@ fn lower_native_pattern(
                     objects,
                     runtime_literal_indices,
                     backend,
+                    owned_bindings,
                 )?;
                 matched = builder.ins().band(matched, field_matched);
                 bindings.append(&mut field_bindings);
@@ -728,6 +847,15 @@ fn lower_native_pattern(
             builder.ins().jump(join_block, &failed_arguments);
             builder.switch_to_block(join_block);
             let parameters = builder.block_params(join_block);
+            let owned = bindings
+                .iter()
+                .map(|binding| owned_bindings.contains(binding))
+                .collect::<Vec<_>>();
+            for (binding, owned) in parameters[1..].iter().zip(owned) {
+                if owned {
+                    owned_bindings.insert(*binding);
+                }
+            }
             Ok((parameters[0], parameters[1..].to_vec()))
         }
         Pattern::Spanned { .. } => unreachable!(),
@@ -745,6 +873,45 @@ fn pattern_projection(
     borrowed: bool,
     backend: &NativeBackend<'_>,
 ) -> Result<(ClifValue, NativeType), FosterError> {
+    let logical = super::native_verification_type(
+        &backend.ir.program.metadata,
+        backend.ir.layouts,
+        ty,
+        storage.pointee,
+    )?;
+    if storage.pointee == Some(backend.ir.layouts.opaque())
+        && logical != NativeType::Object(backend.ir.layouts.opaque())
+    {
+        let boxed = load_physical_value(builder, module, object, offset, storage);
+        let PhysicalKind::Opaque { value_offset, .. } = backend
+            .ir
+            .physical_layouts
+            .get(backend.ir.layouts.opaque())
+            .kind
+        else {
+            unreachable!()
+        };
+        if borrowed && !matches!(ty, crate::codegen::types::ExecutableType::Reference(_)) {
+            let pointer = backend
+                .ir
+                .layouts
+                .pointer(ty, crate::codegen::layout::Ownership::Borrowed)
+                .ok_or_else(|| native_error("borrowed field has no pointer layout"))?;
+            return Ok((
+                builder.ins().iadd_imm_s(boxed, i64::from(value_offset)),
+                NativeType::Object(pointer),
+            ));
+        }
+        return Ok((
+            builder.ins().load(
+                cranelift_type(logical, module.target_config().pointer_type()),
+                MemFlagsData::trusted(),
+                boxed,
+                value_offset as i32,
+            ),
+            logical,
+        ));
+    }
     if borrowed && !matches!(ty, crate::codegen::types::ExecutableType::Reference(_)) {
         let layout = backend
             .ir
@@ -863,6 +1030,7 @@ fn lower_native_instruction(
             builder.ins().uextend(types::I64, get(operand))
         }
         ir::Instruction::BorrowedFieldIndex {
+            destination,
             object,
             field,
             index,
@@ -878,41 +1046,77 @@ fn lower_native_instruction(
             let NativeType::Object(layout) = receiver_type else {
                 return Err(native_error("borrowed field indexing requires a record"));
             };
-            let PhysicalKind::Record { fields, .. } =
-                &backend.objects.layouts.physical.get(layout).kind
-            else {
-                return Err(native_error("borrowed field indexing requires a record"));
-            };
-            let slot = fields
-                .iter()
-                .find(|slot| slot.name == *field)
-                .ok_or_else(|| native_error("borrowed buffer field is missing"))?;
-            let buffer_layout = slot
-                .value
-                .pointee
-                .ok_or_else(|| native_error("borrowed field is not a buffer"))?;
-            // No allocation, mutation, or callback can intervene between this
-            // projection and the scalar load. The record owns the backing List.
-            let storage = load_physical_value(builder, module, receiver, slot.offset, slot.value);
-            let (address, element) = super::native_buffer_element_address(
+            super::contract_results::with_layout(
                 builder,
                 module,
-                storage,
-                get(index),
-                buffer_layout,
-                backend.objects,
-            )?;
-            if element.pointee.is_some() {
-                return Err(native_error(
-                    "borrowed field indexing requires scalar elements",
-                ));
-            }
-            builder.ins().load(
-                super::physical_cranelift_type(element.kind, module.target_config().pointer_type()),
-                MemFlagsData::trusted(),
-                address,
-                0,
-            )
+                receiver,
+                layout,
+                &[function.value_type(*destination)],
+                backend,
+                |builder, module, actual| {
+                    let PhysicalKind::Record { fields, .. } =
+                        &backend.objects.layouts.physical.get(actual).kind
+                    else {
+                        return Err(native_error("borrowed field indexing requires a record"));
+                    };
+                    let slot = fields
+                        .iter()
+                        .find(|slot| slot.name == *field)
+                        .ok_or_else(|| native_error("borrowed buffer field is missing"))?;
+                    let NativeType::Object(buffer_layout) = super::field_type(
+                        &backend.ir.program.metadata,
+                        backend.ir.layouts,
+                        backend.ir.physical_layouts,
+                        NativeType::Object(actual),
+                        field,
+                    )?
+                    else {
+                        return Err(native_error("borrowed field is not a buffer"));
+                    };
+                    // No allocation, mutation, or callback can intervene between this
+                    // projection and the scalar load. The record owns the backing List.
+                    let mut storage =
+                        load_physical_value(builder, module, receiver, slot.offset, slot.value);
+                    if slot.value.pointee == Some(backend.ir.layouts.opaque()) {
+                        let PhysicalKind::Opaque { value_offset, .. } = backend
+                            .ir
+                            .physical_layouts
+                            .get(backend.ir.layouts.opaque())
+                            .kind
+                        else {
+                            unreachable!()
+                        };
+                        storage = builder.ins().load(
+                            module.target_config().pointer_type(),
+                            MemFlagsData::trusted(),
+                            storage,
+                            value_offset as i32,
+                        );
+                    }
+                    let (address, element) = super::native_buffer_element_address(
+                        builder,
+                        module,
+                        storage,
+                        get(index),
+                        buffer_layout,
+                        backend.objects,
+                    )?;
+                    if element.pointee.is_some() {
+                        return Err(native_error(
+                            "borrowed field indexing requires scalar elements",
+                        ));
+                    }
+                    Ok(vec![builder.ins().load(
+                        super::physical_cranelift_type(
+                            element.kind,
+                            module.target_config().pointer_type(),
+                        ),
+                        MemFlagsData::trusted(),
+                        address,
+                        0,
+                    )])
+                },
+            )?[0]
         }
         ir::Instruction::Binary {
             operator,
@@ -1054,6 +1258,17 @@ fn lower_native_instruction(
             );
             store_physical_value(builder, object, semantic_offset, semantic);
             object
+        }
+        ir::Instruction::ContractView { source, .. } => {
+            let value = get(source);
+            if let Some(layout) = backend
+                .objects
+                .layouts
+                .managed_layout(function.value_type(*source))
+            {
+                backend.objects.retain(builder, value, layout);
+            }
+            value
         }
         ir::Instruction::UnboxValue {
             destination,

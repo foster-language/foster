@@ -67,6 +67,7 @@ pub(super) fn lower(
         {
             if !opaque(receiver_type, environment.layouts)
                 && receiver_type != NativeType::Object(layout.id)
+                && !matches!(receiver_type, NativeType::Object(expected) if environment.contract_views.get(&expected).is_some_and(|actuals| actuals.contains(&layout.id)))
             {
                 continue;
             }
@@ -117,7 +118,7 @@ pub(super) fn lower(
             || opaque(result_type, environment.layouts)
             || opaque(candidate.result, environment.layouts)
             || contract_argument_matches(candidate.result, result_type, environment)
-            || aggregate_result_matches(candidate.result, result_type, environment, 0)
+            || super::contract_results::matches(candidate.result, result_type, environment)
     });
     candidates.sort_by_key(|candidate| candidate.layout);
     if candidates.is_empty() {
@@ -291,12 +292,13 @@ fn getter(
             result_type,
             name,
             backend.objects,
+            backend,
         )
     }
 }
 
 /// Transfer an owned method/accessor result into the representation promised by its contract.
-fn adapt_result(
+pub(super) fn adapt_result(
     builder: &mut FunctionBuilder<'_>,
     module: &mut ObjectModule,
     value: ClifValue,
@@ -307,8 +309,8 @@ fn adapt_result(
     if actual == expected {
         return Ok(value);
     }
-    if aggregate_result_matches(actual, expected, backend.ir, 0) {
-        return adapt_aggregate_result(builder, module, value, actual, expected, backend);
+    if super::contract_results::matches(actual, expected, backend.ir) {
+        return Ok(value);
     }
     if callable_conversion(actual, expected, backend.ir.layouts) {
         let (NativeType::Object(environment_layout), NativeType::Object(callable_layout)) =
@@ -390,86 +392,7 @@ fn adapt_result(
     }
 }
 
-// Rebuild nominal containers without custom destructors. Their payloads can carry a
-// receiver-dependent result through an erased contract without changing user Drop behavior.
-fn aggregate_result_matches(
-    actual: NativeType,
-    expected: NativeType,
-    env: NativeIrEnvironment<'_>,
-    depth: usize,
-) -> bool {
-    if depth >= 32 {
-        return false;
-    }
-    let (NativeType::Object(a), NativeType::Object(b)) = (actual, expected) else {
-        return false;
-    };
-    if a == b {
-        return false;
-    }
-    let nominal = match (&env.layouts.get(a).kind, &env.layouts.get(b).kind) {
-        (LayoutKind::Record { record: x, .. }, LayoutKind::Record { record: y, .. }) if x == y => {
-            crate::types::NominalTypeId::Record(*x)
-        }
-        (
-            LayoutKind::Variant {
-                variant_type: x, ..
-            },
-            LayoutKind::Variant {
-                variant_type: y, ..
-            },
-        ) if x == y => crate::types::NominalTypeId::Variant(*x),
-        _ => return false,
-    };
-    if env
-        .program
-        .metadata
-        .dispatch
-        .keys()
-        .any(|(owner, slot)| *owner == nominal && *slot == crate::types::DEINIT_SLOT)
-    {
-        return false;
-    }
-    let fields_match =
-        |left: &[crate::codegen::layout::physical::FieldLayout],
-         right: &[crate::codegen::layout::physical::FieldLayout]| {
-            left.len() == right.len()
-                && left.iter().zip(right).all(|(x, y)| {
-                    let a = field_native_type(x.value);
-                    let b = field_native_type(y.value);
-                    x.name == y.name
-                        && x.ownership == y.ownership
-                        && x.ownership != crate::codegen::layout::Ownership::Borrowed
-                        && (a == b
-                            || erased_conversion(a, b, env.layouts).is_some()
-                            || aggregate_result_matches(a, b, env, depth + 1))
-                })
-        };
-    match (
-        &env.physical_layouts.get(a).kind,
-        &env.physical_layouts.get(b).kind,
-    ) {
-        (PhysicalKind::Record { fields: a, .. }, PhysicalKind::Record { fields: b, .. }) => {
-            fields_match(a, b)
-        }
-        (
-            PhysicalKind::Variant {
-                alternatives: a, ..
-            },
-            PhysicalKind::Variant {
-                alternatives: b, ..
-            },
-        ) => {
-            a.len() == b.len()
-                && a.iter()
-                    .zip(b)
-                    .all(|(x, y)| x.tag == y.tag && fields_match(&x.fields, &y.fields))
-        }
-        _ => false,
-    }
-}
-
-fn field_native_type(value: ValueLayout) -> NativeType {
+pub(super) fn field_native_type(value: ValueLayout) -> NativeType {
     if matches!(
         value.semantic,
         ValueSemantic::String | ValueSemantic::Symbol
@@ -478,92 +401,4 @@ fn field_native_type(value: ValueLayout) -> NativeType {
     } else {
         native_type_from_value_layout(value)
     }
-}
-
-fn adapt_aggregate_result(
-    builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
-    source: ClifValue,
-    actual: NativeType,
-    expected: NativeType,
-    backend: &NativeBackend<'_>,
-) -> Result<ClifValue, FosterError> {
-    let (NativeType::Object(a), NativeType::Object(b)) = (actual, expected) else {
-        unreachable!()
-    };
-    let target = backend.objects.allocate(builder, module, b)?;
-    let copy_fields = |builder: &mut FunctionBuilder<'_>,
-                       module: &mut ObjectModule,
-                       left: &[crate::codegen::layout::physical::FieldLayout],
-                       right: &[crate::codegen::layout::physical::FieldLayout]|
-     -> Result<(), FosterError> {
-        for (x, y) in left.iter().zip(right) {
-            let value = load_physical_value(builder, module, source, x.offset, x.value);
-            if let Some(layout) = x.value.pointee
-                && backend.objects.layouts.is_managed(layout)
-            {
-                backend.objects.retain(builder, value, layout);
-            }
-            let value = adapt_result(
-                builder,
-                module,
-                value,
-                field_native_type(x.value),
-                field_native_type(y.value),
-                backend,
-            )?;
-            store_physical_value(builder, target, y.offset, value);
-        }
-        Ok(())
-    };
-    match (
-        &backend.ir.physical_layouts.get(a).kind,
-        &backend.ir.physical_layouts.get(b).kind,
-    ) {
-        (PhysicalKind::Record { fields: a, .. }, PhysicalKind::Record { fields: b, .. }) => {
-            copy_fields(builder, module, a, b)?
-        }
-        (
-            PhysicalKind::Variant {
-                tag_offset: a_tag,
-                alternatives: a,
-                ..
-            },
-            PhysicalKind::Variant {
-                tag_offset: b_tag,
-                alternatives: b,
-                ..
-            },
-        ) => {
-            let tag =
-                builder
-                    .ins()
-                    .load(types::I32, MemFlagsData::trusted(), source, *a_tag as i32);
-            store_physical_value(builder, target, *b_tag, tag);
-            let done = builder.create_block();
-            for (index, (x, y)) in a.iter().zip(b).enumerate() {
-                let next = if index + 1 < a.len() {
-                    let selected = builder.create_block();
-                    let next = builder.create_block();
-                    let matches = builder
-                        .ins()
-                        .icmp_imm_s(IntCC::Equal, tag, i64::from(x.tag));
-                    builder.ins().brif(matches, selected, &[], next, &[]);
-                    builder.switch_to_block(selected);
-                    Some(next)
-                } else {
-                    None
-                };
-                copy_fields(builder, module, &x.fields, &y.fields)?;
-                builder.ins().jump(done, &[]);
-                if let Some(next) = next {
-                    builder.switch_to_block(next);
-                }
-            }
-            builder.switch_to_block(done);
-        }
-        _ => unreachable!(),
-    }
-    backend.objects.release(builder, module, source, a)?;
-    Ok(target)
 }

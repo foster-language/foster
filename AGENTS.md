@@ -30,8 +30,9 @@ and the standard library are written in `.fos` files.
   Parameters borrow by default: `item: Replace` names its own storage group
   implicitly and keeps the argument's layout. Explicit groups remain for
   relationships such as `view: ref[owner] T` and borrowed results.
-  Borrowed return annotations are contracts too: the returned item keeps its
-  original storage, and its group describes provenance rather than its shape.
+  Return annotations are contracts too: owned results transfer the original item;
+  borrowed results keep their original storage. Groups describe provenance rather
+  than shape. Nested containers and destructors retain their original identity.
   Ordinary methods can replace the caller's whole binding with `self = value`;
   replacement requires `reshape self` (inferred when effects are omitted) and
   invalidates overlapping borrows.

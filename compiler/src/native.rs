@@ -88,6 +88,7 @@ use remote::{
     lower_native_await, lower_native_remote_call, lower_native_spawn_remote,
     lower_result_error_conversion,
 };
+mod contract_results;
 mod reference_results;
 mod representation;
 use representation::{
@@ -168,6 +169,7 @@ struct NativeIrEnvironment<'a> {
     instances: &'a HashMap<SpecializationKey, FunctionId>,
     builtin_result_types:
         &'a HashMap<crate::intrinsics::Builtin, crate::codegen::types::ExecutableType>,
+    contract_views: &'a HashMap<LayoutId, BTreeSet<LayoutId>>,
 }
 
 /// Shared immutable state for lowering one module's functions to Cranelift.

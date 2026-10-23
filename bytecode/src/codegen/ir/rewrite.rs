@@ -62,7 +62,11 @@ impl Instruction {
                     *value = rewrite(*value);
                 }
             }
-            Self::WrapCallable {
+            Self::ContractView {
+                destination,
+                source,
+            }
+            | Self::WrapCallable {
                 destination,
                 source,
                 ..

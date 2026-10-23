@@ -591,7 +591,7 @@ pub(super) fn infer_instruction(
     Ok(())
 }
 
-fn native_pattern_binding_types(
+pub(in crate::native) fn native_pattern_binding_types(
     program: &crate::codegen::metadata::ProgramMetadata,
     layouts: &LayoutRegistry,
     physical_layouts: &PhysicalRegistry,
@@ -599,8 +599,29 @@ fn native_pattern_binding_types(
     subject: NativeType,
     bindings: &mut Vec<NativeType>,
 ) -> Result<(), FosterError> {
-    let borrowed = matches!(subject, NativeType::Object(layout) if matches!(layouts.get(layout).kind, LayoutKind::Pointer { .. }));
-    let subject = if !matches!(pattern.unspanned(), Pattern::Binding(_)) && borrowed {
+    native_pattern_binding_types_with_borrow(
+        program,
+        layouts,
+        physical_layouts,
+        pattern,
+        subject,
+        bindings,
+        false,
+    )
+}
+
+pub(in crate::native) fn native_pattern_binding_types_with_borrow(
+    program: &crate::codegen::metadata::ProgramMetadata,
+    layouts: &LayoutRegistry,
+    physical_layouts: &PhysicalRegistry,
+    pattern: &Pattern,
+    subject: NativeType,
+    bindings: &mut Vec<NativeType>,
+    borrow: bool,
+) -> Result<(), FosterError> {
+    let reference = matches!(subject, NativeType::Object(layout) if matches!(layouts.get(layout).kind, LayoutKind::Pointer { .. }));
+    let borrowed = reference || borrow;
+    let subject = if !matches!(pattern.unspanned(), Pattern::Binding(_)) && reference {
         let NativeType::Object(layout) = subject else {
             unreachable!()
         };

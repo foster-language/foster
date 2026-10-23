@@ -56,6 +56,7 @@ pub(super) enum ReturnConversion {
     Box,
     Unbox,
     ResultError,
+    ContractView,
 }
 
 impl ReturnConversion {
@@ -75,6 +76,10 @@ impl ReturnConversion {
                     ErasedConversion::Box => Self::Box,
                     ErasedConversion::Unbox => Self::Unbox,
                 })
+            } else if source != target
+                && super::super::contract_results::matches(source, target, environment)
+            {
+                Some(Self::ContractView)
             } else if result_error_conversion(source, target, environment.layouts) {
                 Some(Self::ResultError)
             } else {
@@ -103,6 +108,10 @@ impl ReturnConversion {
                 source,
             },
             Self::ResultError => ir::Instruction::ConvertResultError {
+                destination,
+                source,
+            },
+            Self::ContractView => ir::Instruction::ContractView {
                 destination,
                 source,
             },

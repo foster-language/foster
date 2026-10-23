@@ -1275,8 +1275,10 @@ declaration. Compiler specialization retains the argument's storage layout;
 different parameters may receive different layouts satisfying the same contract.
 
 Return annotations impose the same structural conformance obligation. A returned
-reference preserves the referenced item's storage and layout while exposing the
-declared result contract to the caller. A result group describes its storage
+owned item retains its original representation, nested containers, and destructor;
+returning it transfers ownership. A returned reference preserves the referenced
+item's storage and layout. Both expose the declared result contract to the caller.
+A result group describes its storage
 origins, not an equality between the shapes of the input and output. Providing
 a default implementation does not change a contract reference's representation
 obligations.

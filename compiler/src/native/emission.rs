@@ -98,6 +98,7 @@ pub(super) fn emit_object(
         &drop_ids,
         prepared.environment(),
         &native_ids,
+        &layout_descriptors,
     )?;
     define_release_thunks(&mut module, native_layouts, &drop_ids, &release_thunks)?;
 

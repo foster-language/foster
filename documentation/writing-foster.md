@@ -64,7 +64,8 @@ requires an operation supplied by its contract, since the caller may have
 additional fields that the helper cannot construct.
 
 A return annotation is also a contract: the returned item must satisfy its
-declared fields, methods, and effects. A borrowed result keeps the original
+declared fields, methods, and effects. An owned result transfers the original item,
+including its nested containers and destructor; a borrowed result keeps the original
 item's storage and layout. Callers can use the declared return contract; extra
 fields do not become accessible through that annotation. Its group describes
 where the reference can originate, and does not require the input and output to

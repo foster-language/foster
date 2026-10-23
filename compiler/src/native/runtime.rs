@@ -479,12 +479,8 @@ check_reclamation();
         }
     }
 
-    #[test]
-    fn sequence_collection_contract_results_release_native_allocations() {
-        let compilation = crate::compile(include_str!(
-            "../../../tests/fixtures/programs/sequence_collections.fos"
-        ))
-        .unwrap();
+    fn check_contract_result_allocations(source: &str, expected: &str, label: &str) {
+        let compilation = crate::compile(source).unwrap();
         let prepared = prepare(&compilation).unwrap();
         let temporary = TemporaryDirectory::create().unwrap();
         for optimize in [false, true] {
@@ -501,7 +497,7 @@ check_reclamation();
                 "foster_runtime_check_execution(); check_reclamation();",
             );
             let executable = temporary.path.join(format!(
-                "collections-{optimize}{}",
+                "{label}-{optimize}{}",
                 std::env::consts::EXE_SUFFIX
             ));
             link_source(artifact, &executable, options, &source, None).unwrap();
@@ -511,8 +507,26 @@ check_reclamation();
                 "optimize={optimize}: {}",
                 String::from_utf8_lossy(&output.stderr)
             );
-            assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "42");
+            assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), expected);
         }
+    }
+
+    #[test]
+    fn sequence_collection_contract_results_release_native_allocations() {
+        check_contract_result_allocations(
+            include_str!("../../../tests/fixtures/programs/sequence_collections.fos"),
+            "42",
+            "collections",
+        );
+    }
+
+    #[test]
+    fn owned_contract_results_release_native_allocations() {
+        check_contract_result_allocations(
+            include_str!("../../../tests/fixtures/programs/contract_owned_results.fos"),
+            "viewed\ndrop wide\nreturned\ndrop pair\ndrop envelope\ndrop envelope\n42",
+            "owned-contracts",
+        );
     }
 
     #[test]

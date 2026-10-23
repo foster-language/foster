@@ -374,9 +374,11 @@ body; conformance is checked at calls. Passing the reference must not copy the
 value into a temporary with the contract's declared layout. Independent parameters
 may refer to different layouts satisfying the same contract.
 
-Return annotations validate conformance without choosing the returned reference's
-storage layout. A conforming result keeps its original place and provenance;
-the caller sees the operations guaranteed by the declared return contract.
+Return annotations validate conformance without choosing a replacement storage layout.
+A conforming owned result transfers the original item and its cleanup obligation;
+nested records and enums are not rebuilt to match the annotation. Borrowed results
+keep their original place and provenance. The caller sees the operations guaranteed
+by the declared return contract, while execution uses the item's original layout.
 Storage groups constrain origins independently of the referenced value's shape.
 Default implementations do not change these input or output obligations.
 

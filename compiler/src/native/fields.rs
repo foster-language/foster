@@ -15,9 +15,74 @@ pub(super) fn lower_native_field(
     result_type: NativeType,
     field: &str,
     objects: ObjectRuntime<'_>,
+    backend: &super::NativeBackend<'_>,
 ) -> Result<ClifValue, FosterError> {
     let NativeType::Object(layout) = receiver_type else {
         return Err(native_error("native field load requires a Foster object"));
+    };
+    if backend.ir.contract_views.contains_key(&layout) {
+        return super::contract_results::with_layout(
+            builder,
+            module,
+            receiver,
+            layout,
+            &[result_type],
+            backend,
+            |builder, module, actual| {
+                let actual_type = super::field_type(
+                    &backend.ir.program.metadata,
+                    backend.ir.layouts,
+                    backend.ir.physical_layouts,
+                    NativeType::Object(actual),
+                    field,
+                )?;
+                let value = lower_native_field_static(
+                    builder,
+                    module,
+                    receiver,
+                    NativeType::Object(actual),
+                    actual_type,
+                    field,
+                    objects,
+                    backend,
+                )?;
+                Ok(vec![super::dispatch::adapt_result(
+                    builder,
+                    module,
+                    value,
+                    actual_type,
+                    result_type,
+                    backend,
+                )?])
+            },
+        )
+        .map(|values| values[0]);
+    }
+    lower_native_field_static(
+        builder,
+        module,
+        receiver,
+        receiver_type,
+        result_type,
+        field,
+        objects,
+        backend,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn lower_native_field_static(
+    builder: &mut FunctionBuilder<'_>,
+    module: &mut ObjectModule,
+    receiver: ClifValue,
+    receiver_type: NativeType,
+    result_type: NativeType,
+    field: &str,
+    objects: ObjectRuntime<'_>,
+    backend: &super::NativeBackend<'_>,
+) -> Result<ClifValue, FosterError> {
+    let NativeType::Object(layout) = receiver_type else {
+        unreachable!()
     };
     if matches!(
         objects.layouts.logical.get(layout).kind,
@@ -155,8 +220,9 @@ pub(super) fn lower_native_field(
         .record_field(layout, slot.index)
         .ok_or_else(|| native_error("record field has no physical slot"))?;
     let result = load_physical_value(builder, module, receiver, physical.offset, physical.value);
-    if let Some(pointee) = objects.layouts.managed_layout(result_type) {
+    let storage_type = super::dispatch::field_native_type(physical.value);
+    if let Some(pointee) = objects.layouts.managed_layout(storage_type) {
         objects.retain(builder, result, pointee);
     }
-    Ok(result)
+    super::dispatch::adapt_result(builder, module, result, storage_type, result_type, backend)
 }

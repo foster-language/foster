@@ -73,6 +73,7 @@ pub struct NativeProgram<'a> {
     pub(super) runtime_string_indices: HashMap<u16, u64>,
     pub(super) runtime_literal_indices: HashMap<String, u64>,
     pub(super) functions: Vec<NativeFunction>,
+    pub(super) contract_views: HashMap<LayoutId, BTreeSet<LayoutId>>,
 }
 
 /// Prepare once, then render or emit any number of objects without repeating specialization.
@@ -182,6 +183,7 @@ fn prepare_shared(
         runtime_string_indices,
         runtime_literal_indices,
         functions: Vec::new(),
+        contract_views: HashMap::new(),
     };
     prepared.resolve_reference_results(facts)?;
     for instance in &prepared.instances {
@@ -293,6 +295,18 @@ fn prepare_shared(
             logical_value_types,
         });
     }
+    prepared.contract_views = super::contract_results::collect_views(&prepared)?;
+    let erased_fields = super::contract_results::erased_fields(&prepared);
+    if !erased_fields.is_empty() {
+        prepared.physical_layouts = PhysicalRegistry::build_with_erased_fields(
+            &prepared.layouts,
+            TargetLayout::host(),
+            &erased_fields,
+        )
+        .map_err(|error| {
+            native_error(format!("cannot calculate contract field layouts: {error}"))
+        })?;
+    }
     Ok(prepared)
 }
 
@@ -373,6 +387,7 @@ impl NativeProgram<'_> {
             physical_layouts: &self.physical_layouts,
             instances: &self.instance_ids,
             builtin_result_types: &self.builtin_result_types,
+            contract_views: &self.contract_views,
         }
     }
 }

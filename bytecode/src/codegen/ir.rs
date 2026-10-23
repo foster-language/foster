@@ -45,7 +45,8 @@ pub enum Type {
     CodePoint,
     Byte,
     String,
-    /// A descriptor-backed Foster allocation with a statically known physical layout.
+    /// A descriptor-backed Foster allocation. Native contract views retain the
+    /// original allocation and use its descriptor when its layout differs.
     Object(LayoutId),
 }
 
@@ -332,6 +333,12 @@ pub enum Instruction {
     },
     /// Reads a statically verified representation from an erased box.
     UnboxValue {
+        destination: Value,
+        source: Value,
+    },
+    /// Retains an original allocation through a checked contract view. Physical
+    /// operations follow its original descriptor; no replacement is allocated.
+    ContractView {
         destination: Value,
         source: Value,
     },
@@ -682,6 +689,7 @@ impl Instruction {
             | Self::StringToBytes { destination, .. }
             | Self::BoxValue { destination, .. }
             | Self::UnboxValue { destination, .. }
+            | Self::ContractView { destination, .. }
             | Self::BorrowedFieldIndex { destination, .. }
             | Self::ConvertResultError { destination, .. } => vec![*destination],
             Self::Assert { .. } => Vec::new(),
@@ -704,6 +712,9 @@ impl Instruction {
                 source: operand, ..
             }
             | Self::UnboxValue {
+                source: operand, ..
+            }
+            | Self::ContractView {
                 source: operand, ..
             }
             | Self::ConvertResultError {
@@ -1184,7 +1195,11 @@ impl<'a> Verifier<'a> {
                 }
                 Ok(())
             }
-            Instruction::ConvertResultError {
+            Instruction::ContractView {
+                destination,
+                source,
+            }
+            | Instruction::ConvertResultError {
                 destination,
                 source,
             } => {
@@ -1412,6 +1427,9 @@ fn display_instruction(
         }
         Instruction::BoxValue { source, .. } => write!(formatter, "box v{}", source.0),
         Instruction::UnboxValue { source, .. } => write!(formatter, "unbox v{}", source.0),
+        Instruction::ContractView { source, .. } => {
+            write!(formatter, "contract_view v{}", source.0)
+        }
         Instruction::BorrowedFieldIndex {
             object,
             field,

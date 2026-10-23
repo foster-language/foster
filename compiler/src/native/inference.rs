@@ -8,6 +8,8 @@ mod instructions;
 mod representations;
 #[cfg(test)]
 mod tests;
+pub(super) use instructions::native_pattern_binding_types;
+pub(super) use instructions::native_pattern_binding_types_with_borrow;
 use instructions::{infer_instruction, representation_operand};
 use representations::join_representation;
 pub(super) use representations::{

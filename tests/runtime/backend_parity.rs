@@ -2,6 +2,29 @@
 use foster::{native, vm};
 
 #[test]
+fn owned_contract_results_preserve_original_items_and_destructors() {
+    check_stdout(
+        "contract-owned-results",
+        include_str!("../fixtures/programs/contract_owned_results.fos"),
+        "viewed\ndrop wide\nreturned\ndrop pair\ndrop envelope\ndrop envelope\n42",
+    );
+}
+
+#[test]
+fn owned_contract_results_release_original_items_on_failure() {
+    let source = include_str!("../fixtures/programs/contract_owned_results.fos").replace(
+        "println(\"returned\")",
+        "assert(false, \"owned result failed\")",
+    );
+    check_process_output(
+        "contract-owned-failure",
+        &source,
+        "viewed\ndrop wide\ndrop envelope\ndrop envelope",
+        Some("owned result failed"),
+    );
+}
+
+#[test]
 fn implicit_parameter_storage_allows_purer_method_implementations() {
     check(
         "implicit-parameter-contracts",
@@ -3704,6 +3727,48 @@ func main() -> Int {
     let compilation = foster::check_project(&project).unwrap();
     check_compilation(
         "compiled-contract-reference-consumer",
+        &compilation,
+        Ok("42"),
+    );
+}
+
+#[test]
+fn compiled_owned_contract_results_preserve_private_storage_and_cleanup() {
+    let source = r#"
+pub type Value = { pub number: Int }
+type Item = { extra: String, pub number: Int }
+impl Item { func deinit() -> () { assert(self.extra == "original") } }
+pub func make() -> Value { Item { extra: "original", number: 40 } }
+func main() -> Int { 42 }
+"#;
+    let mut package =
+        foster::package::Package::from_program_with_core("main", foster::parse(source).unwrap())
+            .unwrap();
+    package
+        .symbol_modules
+        .insert("main".into(), ("contracts".into(), "main".into()));
+    let producer = foster::compiler::check(package).unwrap();
+    let bytes = foster::library::encode(&foster::library::build(&producer).unwrap()).unwrap();
+    let scratch = Scratch::new("compiled-owned-contract-results");
+    std::fs::create_dir_all(scratch.0.join("src")).unwrap();
+    std::fs::write(scratch.0.join("contracts.flib"), bytes).unwrap();
+    std::fs::write(scratch.0.join("foster.toml"), "[package]\nname = 'owned_consumer'\n[dependencies]\ncontracts = { path = 'contracts.flib' }\n").unwrap();
+    std::fs::write(
+        scratch.0.join("src/main.fos"),
+        r#"
+import static contracts.make
+func main() -> Int {
+    let item = make()
+    item.number = item.number + 2
+    item.number
+}
+"#,
+    )
+    .unwrap();
+    let compilation =
+        foster::check_project(&foster::project::Project::load(&scratch.0).unwrap()).unwrap();
+    check_compilation(
+        "compiled-owned-contract-result-consumer",
         &compilation,
         Ok("42"),
     );

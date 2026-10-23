@@ -200,6 +200,7 @@ pub(super) fn define_layout_destructors(
     destructors: &HashMap<LayoutId, FuncId>,
     environment: NativeIrEnvironment<'_>,
     functions: &HashMap<FunctionId, FuncId>,
+    descriptors: &HashMap<LayoutId, DataId>,
 ) -> Result<(), FosterError> {
     for layout in layouts
         .physical
@@ -223,6 +224,29 @@ pub(super) fn define_layout_destructors(
             builder.append_block_params_for_function_params(entry);
             builder.switch_to_block(entry);
             let object = builder.block_params(entry)[0];
+            if let Some(actuals) = environment.contract_views.get(&layout.id) {
+                let word = module.target_config().pointer_type();
+                let descriptor = builder.ins().load(
+                    word,
+                    MemFlagsData::trusted(),
+                    object,
+                    layout.header.descriptor_offset as i32,
+                );
+                for actual in actuals.iter().filter(|actual| **actual != layout.id) {
+                    let selected = builder.create_block();
+                    let next = builder.create_block();
+                    let data = module.declare_data_in_func(descriptors[actual], builder.func);
+                    let expected = builder.ins().symbol_value(word, data);
+                    let matched = builder.ins().icmp(IntCC::Equal, descriptor, expected);
+                    builder.ins().brif(matched, selected, &[], next, &[]);
+                    builder.switch_to_block(selected);
+                    let destructor = module.declare_func_in_func(destructors[actual], builder.func);
+                    builder.ins().call(destructor, &[object]);
+                    let unit = builder.ins().iconst(types::I8, 0);
+                    builder.ins().return_(&[unit]);
+                    builder.switch_to_block(next);
+                }
+            }
             if let Some(candidate) = contract_candidates(
                 crate::types::DEINIT_SLOT,
                 NativeType::Object(layout.id),

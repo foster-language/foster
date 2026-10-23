@@ -527,7 +527,13 @@ pub(super) fn contract_candidates(
         .iter()
         .filter(|layout| layout.materialized)
     {
-        if !dynamic && layout.id != receiver_layout {
+        if !dynamic
+            && layout.id != receiver_layout
+            && !environment
+                .contract_views
+                .get(&receiver_layout)
+                .is_some_and(|layouts| layouts.contains(&layout.id))
+        {
             continue;
         }
         let concrete = match &layout.kind {

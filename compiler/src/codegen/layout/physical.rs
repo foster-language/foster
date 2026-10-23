@@ -506,6 +506,40 @@ pub struct PhysicalRegistry {
 }
 
 impl PhysicalRegistry {
+    /// Select erased field storage before allocation while retaining the logical
+    /// schemas. This keeps a field's borrowed ABI stable across contract views.
+    pub(crate) fn build_with_erased_fields(
+        logical: &Registry,
+        target: TargetLayout,
+        erased: &std::collections::BTreeSet<(LayoutId, String)>,
+    ) -> Result<Self, LayoutError> {
+        let mut storage = logical.clone();
+        for (layout, name) in erased {
+            match &mut storage.layouts[layout.0 as usize].kind {
+                LayoutKind::Record { fields, .. } => {
+                    if let Some(field) = fields.iter_mut().find(|field| field.name == *name) {
+                        field.ty = ExecutableType::Unknown;
+                        field.ownership = Ownership::Owned;
+                    }
+                }
+                LayoutKind::Variant { alternatives, .. } => {
+                    if let Some(index) = name
+                        .strip_prefix("payload")
+                        .and_then(|index| index.parse::<usize>().ok())
+                    {
+                        for alternative in alternatives {
+                            if let Some(field) = alternative.payload.get_mut(index) {
+                                *field = ExecutableType::Unknown;
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        Self::build(&storage, target)
+    }
+
     pub fn build(logical: &Registry, target: TargetLayout) -> Result<Self, LayoutError> {
         let header = object_header(target)?;
         let mut layouts = Vec::with_capacity(logical.layouts().len());
