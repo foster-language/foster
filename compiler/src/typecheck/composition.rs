@@ -25,6 +25,87 @@ pub(super) struct EffectiveMethod {
 }
 
 impl Checker<'_> {
+    // An implementation may use fewer effects than its requirement, but its
+    // incoming storage convention must still support the published contract.
+    pub(super) fn required_parameter_storage(
+        &mut self,
+        function: FunctionId,
+        parameters: &[Ty],
+    ) -> Result<Vec<bool>, FosterError> {
+        let mut storage = vec![false; parameters.len()];
+        let definition = &self.hir.functions[function];
+        if definition.receiver.is_none() {
+            return Ok(storage);
+        }
+        let name = definition.name.rsplit('.').next().unwrap().to_owned();
+        let receiver = match &parameters[0] {
+            Ty::Reference(_, value) => value.as_ref(),
+            value => value,
+        };
+        let methods = match receiver {
+            Ty::Record(record, arguments) => self.effective_record_methods(*record, arguments)?,
+            Ty::Variant(variant, arguments) => {
+                let owner = self.hir.variant_types[*variant].clone();
+                let generics = owner
+                    .parameters
+                    .iter()
+                    .cloned()
+                    .zip(arguments.iter().cloned())
+                    .collect();
+                let mut methods = Vec::new();
+                for composition in &owner.compositions {
+                    let contract = self.annotation_type(owner.module, composition, &generics)?;
+                    self.collect_variant_contract_methods(&owner, contract, &mut methods)?;
+                }
+                for requirement in &owner.methods {
+                    let method = self.method_requirement(
+                        &owner.name,
+                        owner.module,
+                        requirement,
+                        &generics,
+                        None,
+                    )?;
+                    Self::merge_variant_method(&owner.name, &mut methods, method)?;
+                }
+                methods
+            }
+            _ => return Ok(storage),
+        };
+        for method in methods
+            .into_iter()
+            .filter(|method| method.name == name && method.parameters.len() + 1 == parameters.len())
+        {
+            let substitutions = self.substitutions.clone();
+            let next_variable = self.next_variable;
+            let mut generics = HashMap::new();
+            let matches =
+                method
+                    .parameters
+                    .iter()
+                    .zip(&parameters[1..])
+                    .all(|(expected, actual)| {
+                        let expected = match &expected.ty {
+                            Ty::Reference(_, value) => value.as_ref(),
+                            value => value,
+                        };
+                        let actual = match actual {
+                            Ty::Reference(_, value) => value.as_ref(),
+                            value => value,
+                        };
+                        let expected = self.instantiate(expected.clone(), &mut generics);
+                        self.unify(expected, actual.clone(), function).is_ok()
+                    });
+            self.substitutions = substitutions;
+            self.next_variable = next_variable;
+            if matches {
+                for (index, parameter) in method.parameters.iter().enumerate() {
+                    storage[index + 1] |= matches!(parameter.ty, Ty::Reference(..));
+                }
+            }
+        }
+        Ok(storage)
+    }
+
     pub(super) fn method_result_for_receiver(
         &mut self,
         method: &EffectiveMethod,
@@ -712,9 +793,10 @@ impl Checker<'_> {
                     crate::ast::ParameterMode::Borrow
                 };
                 let ty = if mode == crate::ast::ParameterMode::Borrow
-                    && crate::hir::queries::type_exposes_group(
-                        requirement.return_type.as_ref(),
+                    && crate::hir::queries::parameter_requires_storage(
                         &parameter.name,
+                        requirement.return_type.as_ref(),
+                        &requirement.effects,
                     )
                     && !matches!(ty, Ty::Reference(..))
                 {

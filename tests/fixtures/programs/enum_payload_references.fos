@@ -30,7 +30,7 @@ func nested(value: Wrapped) -> ref[value] Item {
         _ -> panic("empty nested choice")
     }
 }
-func classify(value: ref[value] Wrapped) -> Int {
+func classify(value: Wrapped) -> Int {
     branch value {
         Wrapped.Wrap(Choice.Stored({
             value: 42
@@ -45,10 +45,10 @@ func scalar(value: Number) -> ref[value] Int {
         Number.Present(number) -> ref number
     }
 }
-func read_number(value: ref[value] Int) -> Int {
+func read_number(value: Int) -> Int {
     value
 }
-func increment(value: ref[value] Int) -> () {
+func increment(value: Int) -> () {
     value = value + 2
     ()
 }
@@ -65,7 +65,7 @@ func via_contract(value: BorrowItem) -> Int {
     item.value = item.value + 1
     item.value
 }
-func replace_item(value: ref[value] Item) -> () {
+func replace_item(value: Item) -> () {
     value.value = 42
     value.text = "replaced"
     ()

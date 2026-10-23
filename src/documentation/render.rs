@@ -555,7 +555,7 @@ fn function_signature(
             let name = &compilation.hir.locals[local.local].name;
             let ty = signature
                 .and_then(|sig| sig.parameters.get(index))
-                .map(|ty| links.resolved(ty.ty))
+                .map(|ty| links.resolved(compilation.types.parameter_annotation_type(name, ty.ty)))
                 .unwrap_or_else(|| "_".into());
             let consume = signature
                 .and_then(|sig| sig.parameters.get(index).map(|p| &p.mode))

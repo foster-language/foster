@@ -1,34 +1,38 @@
 //! Group-parameterized references and explicit callable effect contracts.
 
-type Counters = { accepted: Int, rejected: Int, limit: Int }
+type Counters = {
+    accepted: Int, rejected: Int, limit: Int
+}
 
-func record_batch(counts: ref[counts] Counters) -> () [mut counts(accepted, rejected)] {
+func record_batch(counts: Counters) -> () [mut counts(accepted, rejected)] {
     counts.accepted = counts.accepted + 2
     counts.rejected = counts.rejected + 1
     ()
 }
 
 test "grouped effects mutate named fields and preserve other fields" {
-    let counts = Counters { accepted: 0, rejected: 0, limit: 10 }
+    let counts = Counters {
+        accepted: 0, rejected: 0, limit: 10
+    }
     record_batch(ref counts)
     assert(counts.accepted == 2)
     assert(counts.rejected == 1)
     assert(counts.limit == 10)
 }
 
-func replace(value: ref[value] Int) -> Int [mut value] {
+func replace(value: Int) -> Int [mut value] {
     value = 2
     value
 }
 
-func incrementer(value: ref[value] Int) -> func() -> Int [mut value] {
+func incrementer(value: Int) -> func() -> Int [mut value] {
     [ref value] () -> [mut value] {
         value = value + 1
         value
     }
 }
 
-func transfer(from: ref[from] Int, to: ref[to] Int) -> Int [read from, mut to] {
+func transfer(from: Int, to: Int) -> Int [read from, mut to] {
     to = from
     to
 }

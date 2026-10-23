@@ -30,7 +30,7 @@ func record(value: Flags) -> Int {
         } -> 9
     }
 }
-func borrowed(value: ref[value] Maybe<Bool>) -> Int {
+func borrowed(value: Maybe<Bool>) -> Int {
     branch value {
         Maybe.Some(true) -> 10
         Maybe.Some(false) -> 11

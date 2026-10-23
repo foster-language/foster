@@ -1,0 +1,56 @@
+import core.copy.Copy
+
+pub type Item = {
+    pub value: Int
+}
+pub type Contract = {
+    pub func inspect(item: Item) -> Int [mut item]
+}
+pub type Implementation = & Contract & {}
+impl Implementation {
+    pub func inspect(value: Item) -> Int {
+        value.value
+    }
+}
+pub type ScalarContract = {
+    pub func inspect(item: Int) -> Int [mut item]
+}
+pub enum Choice = Empty & ScalarContract
+impl Choice {
+    pub func inspect(value: Int) -> Int {
+        value.copy()
+    }
+}
+func invoke(reader: Contract, item: Item) -> Int {
+    reader.inspect(item)
+}
+type Cell<T> = {
+    pub value: T
+}
+func refresh<T & Copy>(item: Cell<T>) -> () {
+    item.value = item.value.copy()
+    ()
+}
+func first(left: Int, right: Int) -> ref[left] Int {
+    ref left
+}
+func select(callback: func(ref[left] Int, Int) -> ref[left] Int, left: Int, right: Int) -> ref[left] Int {
+    callback(ref left, ref right)
+}
+func main() -> Int {
+    let left = 42
+    let right = 1
+    let result = select(first, left, right)
+    right = 2
+    assert(result.copy() == 42)
+    let cell = Cell {
+        value: 42
+    }
+    refresh(cell)
+    assert(cell.value == 42)
+    let item = Item {
+        value: 42
+    }
+    assert(Choice.Empty.inspect(42) == 42)
+    invoke(Implementation {}, item)
+}

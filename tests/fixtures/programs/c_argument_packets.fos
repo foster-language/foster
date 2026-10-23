@@ -6,7 +6,7 @@ type Holder = {
     packet: CArguments
 }
 
-func append(packet: ref[packet] CArguments) -> () {
+func append(packet: CArguments) -> () {
     packet.integer(42)
 }
 

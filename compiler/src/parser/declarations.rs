@@ -902,6 +902,11 @@ impl Parser {
             let type_start = self.peek().range.start;
             let ty = self.type_expr()?;
             let type_end = self.tokens[self.current.saturating_sub(1)].range.end;
+            if matches!(&ty, TypeExpr::Reference { group, .. } if group == &name) {
+                return Err(self.error(&format!(
+                    "parameter `{name}` already names its storage group; remove the redundant `ref[{name}]` from its type"
+                )).with_primary_label(type_start..type_end, "use the pointee type directly"));
+            }
             (Some(ty), Some(type_start..type_end))
         } else {
             (None, None)

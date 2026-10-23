@@ -96,7 +96,10 @@ impl<'a, 'hir> EffectDerivation<'a, 'hir> {
             let owner = reference_parameter_group
                 .or(declared_parameter_group)
                 .unwrap_or_else(|| {
-                    if definition.effects_explicit {
+                    if definition.effects_explicit
+                        && checker.functions[&function].parameters[index].mode
+                            == crate::ast::ParameterMode::Consume
+                    {
                         crate::ast::GroupPath::root(FRAME_GROUP)
                     } else {
                         crate::ast::GroupPath::root(checker.hir.locals[local.local].name.clone())
@@ -151,6 +154,35 @@ impl<'a, 'hir> EffectDerivation<'a, 'hir> {
 
     fn add(&mut self, kind: crate::ast::EffectKind, group: crate::ast::GroupPath) {
         if group.root == FRAME_GROUP || !self.contract.contains(&group.root) {
+            return;
+        }
+        let definition = &self.checker.hir.functions[self.function];
+        // Ordinary borrowed arguments already permit reads. An explicit row
+        // must still account for every mutation, even when it omits that input.
+        if matches!(
+            kind,
+            crate::ast::EffectKind::Read | crate::ast::EffectKind::Consume
+        ) && definition.effects_explicit
+            && !definition
+                .effects
+                .iter()
+                .any(|effect| effect.target.root == group.root)
+            && definition
+                .parameters
+                .iter()
+                .enumerate()
+                .any(|(index, parameter)| {
+                    definition.receiver != Some(parameter.local)
+                        && self.checker.hir.locals[parameter.local].name == group.root
+                        && self.checker.functions[&self.function].parameters[index].mode
+                            == crate::ast::ParameterMode::Borrow
+                        && (kind != crate::ast::EffectKind::Consume
+                            || !matches!(
+                                self.checker.functions[&self.function].parameters[index].ty,
+                                Ty::Reference(..)
+                            ))
+                })
+        {
             return;
         }
         let effect = crate::ast::Effect {
@@ -933,7 +965,7 @@ mod tests {
     #[test]
     fn referenced_outer_groups_match_eager_derivation() {
         let source = r#"
-func make(value: ref[value] Int) -> func() -> Int [mut value] {
+func make(value: Int) -> func() -> Int [mut value] {
     [ref value] () -> [mut value] {
         value = value + 1
         value

@@ -164,11 +164,13 @@ impl Checker<'_> {
         function: FunctionId,
         ty: Ty,
     ) -> Result<Ty, FosterError> {
-        let requirements = self.constraint_requirements(function, &ty)?;
-        Ok(if requirements.is_empty() {
-            ty
-        } else {
-            Ty::Intersection(requirements)
+        let mut requirements = self.constraint_requirements(function, &ty)?;
+        Ok(match requirements.len() {
+            0 => ty,
+            // Retain the contract's identity so composed default methods remain
+            // available after a borrowed parameter gains a layout constraint.
+            1 => requirements.pop().unwrap(),
+            _ => Ty::Intersection(requirements),
         })
     }
 
@@ -180,6 +182,12 @@ impl Checker<'_> {
     ) -> Result<(), FosterError> {
         if self.hir.functions[target].constraints.is_empty() {
             return Ok(());
+        }
+        let mut bindings = bindings.clone();
+        for parameter in &self.hir.functions[target].type_parameters {
+            if !bindings.contains_key(parameter) {
+                bindings.insert(parameter.clone(), self.fresh());
+            }
         }
         let key = (
             target,
@@ -197,7 +205,7 @@ impl Checker<'_> {
             ));
         }
         self.constraint_proofs.push(key);
-        let result = self.prove_constraints(caller, target, bindings);
+        let result = self.prove_constraints(caller, target, &bindings);
         self.constraint_proofs.pop();
         result
     }
@@ -209,7 +217,17 @@ impl Checker<'_> {
         bindings: &HashMap<String, Ty>,
     ) -> Result<(), FosterError> {
         let definition = &self.hir.functions[target];
-        for constraint in &definition.constraints {
+        // Layout bounds can infer type parameters that no longer occur directly
+        // in the physical signature. Establish them before checking user bounds.
+        for constraint in
+            definition
+                .constraints
+                .iter()
+                .filter(|constraint| crate::types::is_reference_parameter(&constraint.parameter))
+                .chain(definition.constraints.iter().filter(|constraint| {
+                    !crate::types::is_reference_parameter(&constraint.parameter)
+                }))
+        {
             if self.suppress_constraint_assumptions
                 && crate::types::is_reference_parameter(&constraint.parameter)
             {
@@ -239,7 +257,7 @@ impl Checker<'_> {
                     ),
                 ));
             }
-            self.coerce(expected.clone(), actual.clone(), caller).map_err(|error| self.error(caller,
+            self.coerce_constraint(expected.clone(), actual.clone(), caller).map_err(|error| self.error(caller,
                 format!("implementation constraint for `{}` is not satisfied: `{}` must satisfy `{}` ({})",
                     definition.name, self.describe(&actual), self.describe(&expected), error.message)))?;
         }
@@ -252,12 +270,16 @@ impl Checker<'_> {
         target: FunctionId,
         callable: &Ty,
         receiver: Option<Ty>,
-    ) -> Result<(), FosterError> {
+    ) -> Result<HashMap<String, Ty>, FosterError> {
         if self.hir.functions[target].constraints.is_empty() {
-            return Ok(());
+            return Ok(HashMap::new());
         }
         let signature = self.functions[&target].clone();
-        let mut bindings = HashMap::new();
+        let mut bindings = self.hir.functions[target]
+            .type_parameters
+            .iter()
+            .map(|name| (name.clone(), self.fresh()))
+            .collect::<HashMap<_, _>>();
         let expected = signature
             .parameters
             .iter()
@@ -282,10 +304,14 @@ impl Checker<'_> {
         if !remote && let Ty::Callable { result, .. } | Ty::Function(_, result) = callable {
             self.unify(expected_result, (**result).clone(), caller)?;
         }
-        self.check_constraints_with_bindings(caller, target, &bindings)
+        self.check_constraints_with_bindings(caller, target, &bindings)?;
+        Ok(bindings)
     }
 
-    pub(super) fn validate_constraint_uses(&mut self) -> Result<(), FosterError> {
+    pub(super) fn validate_constraint_uses(
+        &mut self,
+    ) -> Result<HashMap<ExprId, HashMap<String, Ty>>, FosterError> {
+        let mut arguments = HashMap::new();
         let calls = self
             .resolved_calls
             .iter()
@@ -310,7 +336,8 @@ impl Checker<'_> {
             } else {
                 None
             };
-            self.check_callable_constraints(caller, target, &callable, receiver)
+            let bindings = self
+                .check_callable_constraints(caller, target, &callable, receiver)
                 .map_err(|error| {
                     self.error_at_expression(
                         error,
@@ -319,8 +346,12 @@ impl Checker<'_> {
                         "this implementation requires a matching structural contract",
                     )
                 })?;
+            arguments.insert(expression, bindings);
         }
         for (expression, value) in self.hir.expressions.iter() {
+            if arguments.contains_key(&expression) {
+                continue;
+            }
             let hir::Expr::Name(ResolvedName::Function(target)) = value else {
                 continue;
             };
@@ -330,13 +361,14 @@ impl Checker<'_> {
             let Some(callable) = self.expressions.get(&expression).cloned() else {
                 continue;
             };
-            self.check_callable_constraints(
+            let bindings = self.check_callable_constraints(
                 self.hir.expression_functions[&expression],
                 *target,
                 &callable,
                 None,
             )?;
+            arguments.insert(expression, bindings);
         }
-        Ok(())
+        Ok(arguments)
     }
 }

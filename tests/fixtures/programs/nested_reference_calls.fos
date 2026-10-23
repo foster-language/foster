@@ -14,11 +14,15 @@ impl Item {
         }
     }
 }
-func borrow(item: ref[item] Int) -> ref[item] Int {
+func borrow(item: Int) -> ref[item] Int {
     ref item
 }
-func borrowed_item(item: ref[item] Item) -> ref[item] Item {
+func borrowed_item(item: Item) -> ref[item] Item {
     ref item
+}
+func replace(value: Int) -> Int {
+    value = 42
+    value
 }
 func main() -> Int {
     let original = 42
@@ -32,5 +36,11 @@ func main() -> Int {
     }
     let receiver = borrowed_item(item).borrowed().borrowed()
     assert(receiver.read() == 42)
+    let changed = replace(original)
+    assert(original == 42 && changed == 42)
+    original = 1
+    let copied = replace(original.copy())
+    assert(original == 1 && copied == 42)
+    original = 42
     original
 }

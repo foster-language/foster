@@ -88,10 +88,48 @@ pub(super) fn parameter_origins(types: &TypeInformation, signature: &FunctionTyp
         .iter()
         .enumerate()
         .filter_map(|(index, parameter)| {
-            let excluded = matches!((&types.types[signature.result], &types.types[parameter.ty]),
-            (Type::Reference { group: result, .. }, Type::Reference { group: input, .. })
-                if result != "_" && input != "_" && result != "<frame>" && input != "<frame>" && result != input);
+            let excluded = match &types.types[signature.result] {
+                Type::Reference { group: result, .. } if result != "_" && result != "<frame>" => {
+                    match &types.types[parameter.ty] {
+                        Type::Reference { group: input, .. } => {
+                            input != "_" && input != "<frame>" && result != input
+                        }
+                        _ => matches!(
+                            types.types[parameter.ty],
+                            Type::Never
+                                | Type::Unit
+                                | Type::Bool
+                                | Type::Int
+                                | Type::RawInt
+                                | Type::Float
+                                | Type::CodePoint
+                                | Type::Byte
+                        ),
+                    }
+                }
+                _ => false,
+            };
             (!excluded).then_some(index)
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn reference_results_exclude_plain_scalars_but_keep_aggregate_dependencies() {
+        for (other, expected) in [("Int", vec![0]), ("Closed", vec![0, 1])] {
+            let source = format!(
+                "type Closed = {{ value: Int }}\nfunc select(left: Int, other: {other}) -> ref[left] Int {{ ref left }}"
+            );
+            let compilation = crate::compile(&source).unwrap();
+            let module = compilation.hir.module_named("main").unwrap();
+            let function = compilation.hir.function_named(module, "select").unwrap();
+            let signature = compilation.types.function_type(function).unwrap();
+            assert_eq!(
+                super::parameter_origins(&compilation.types, signature),
+                expected
+            );
+        }
+    }
 }

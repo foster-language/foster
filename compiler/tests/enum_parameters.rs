@@ -69,7 +69,7 @@ fn enum_parameters_preserve_ownership() {
     for source in [
         "enum E = Pair(String, String)\nfunc f() { let text = \"owned\"\nE.Pair(move text, move text) }",
         "enum E = Pair(Int, Int)\nfunc f() { let e = E.Pair(1, 2)\nbranch e { E.Pair(_, second) -> ref second } }",
-        "enum E = Pair(Int, Int)\nfunc second(e: E) -> ref[e] Int { branch e { E.Pair(_, b) -> ref b } }\nfunc read(v: ref[v] Int) -> Int { v }\nfunc main() -> Int { let e = E.Pair(1, 2)\nlet b = second(e)\ne = E.Pair(3, 4)\nread(b) }",
+        "enum E = Pair(Int, Int)\nfunc second(e: E) -> ref[e] Int { branch e { E.Pair(_, b) -> ref b } }\nfunc read(v: Int) -> Int { v }\nfunc main() -> Int { let e = E.Pair(1, 2)\nlet b = second(e)\ne = E.Pair(3, 4)\nread(b) }",
     ] {
         assert!(foster_compiler::compile(source).is_err(), "{source}");
     }

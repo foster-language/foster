@@ -7,10 +7,10 @@ type Item = {
 type Reordered = {
     pub marker: Int, pub value: Int
 }
-func bump(item: ref[item] Value) -> () [mut item.value] {
+func bump(item: Value) -> () [mut item.value] {
     item.value = item.value + 1
 }
-func forward(item: ref[item] Value) -> () {
+func forward(item: Value) -> () {
     bump(item)
 }
 func main() -> Int {

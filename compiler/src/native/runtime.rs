@@ -591,10 +591,10 @@ func crash(kind: String, text: String) -> String {
         }
     }
 }
-func reference(box: ref[box] Box, kind: String) -> String {
+func reference(box: Box, kind: String) -> String {
     crash(kind, box.text)
 }
-func nested(items: ref[items] List<Box>, text: String) -> String [mut items] {
+func nested(items: List<Box>, text: String) -> String [mut items] {
     items[0].text = text + "replacement"
     crash("assert", text)
 }

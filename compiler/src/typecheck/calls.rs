@@ -327,15 +327,17 @@ impl Checker<'_> {
                 false
             };
         if remote_call
-            && let Some(unsafe_type) = argument_types.iter().find(|argument| {
-                !remote_transferable(&self.resolved((*argument).clone()), self.hir)
-            })
+            && let Some(unsafe_type) = arguments
+                .iter()
+                .filter_map(|argument| self.expressions.get(argument))
+                .map(|ty| self.resolved(ty.clone()))
+                .find(|ty| !remote_transferable(ty, self.hir))
         {
             return Err(self.error(
                 function,
                 format!(
                     "type `{}` cannot cross a remote-object boundary",
-                    self.describe(unsafe_type)
+                    self.describe(&unsafe_type)
                 ),
             ));
         }
@@ -388,6 +390,16 @@ impl Checker<'_> {
                 && !matches!(actual, Ty::Reference(..))
             {
                 *actual = Ty::Reference(self.expression_group(*argument), Box::new(actual.clone()));
+            } else if borrowed
+                && !matches!(
+                    self.resolved(expected.clone()),
+                    Ty::Reference(..) | Ty::Generic(_) | Ty::Variable(_)
+                )
+                && let Ty::Reference(_, value) = actual
+            {
+                // A borrowed value contract accepts a reference to that value.
+                // Keep the expression's provenance; only compare its pointee here.
+                *actual = *value.clone();
             }
         }
     }

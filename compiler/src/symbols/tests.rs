@@ -68,10 +68,9 @@ fn symbolic_identity_survives_arena_parameter_and_generic_renaming() {
 
 #[test]
 fn groups_and_reference_result_dependencies_are_retained() {
-    let first = compile(
-        "pub func first(left: ref[left] Int, right: ref[left] Int) -> ref[left] Int { ref left }",
-    );
-    let renamed = compile("pub func first(a: ref[a] Int, b: ref[a] Int) -> ref[a] Int { ref a }");
+    let first =
+        compile("pub func first(left: Int, right: ref[left] Int) -> ref[left] Int { ref left }");
+    let renamed = compile("pub func first(a: Int, b: ref[a] Int) -> ref[a] Int { ref a }");
     let descriptor = &definition(&first, "first").descriptor;
     assert_eq!(descriptor, &definition(&renamed, "first").descriptor);
     assert_eq!(descriptor.result_dependencies, vec![0]);

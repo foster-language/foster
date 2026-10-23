@@ -7,11 +7,11 @@ type Frame = {
     pixels: Buffer<Int>
 }
 
-func update(values: ref[values] Buffer<Int>, index: Int, value: Int) -> () {
+func update(values: Buffer<Int>, index: Int, value: Int) -> () {
     values.write(index, value)
 }
 
-func read_reference(values: ref[values] Buffer<Int>, index: Int) -> Int {
+func read_reference(values: Buffer<Int>, index: Int) -> Int {
     values.read(index)
 }
 

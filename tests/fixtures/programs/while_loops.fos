@@ -1,11 +1,15 @@
-type Counter = { value: Int }
-func next(counter: ref[counter] Counter) -> Bool {
+type Counter = {
+    value: Int
+}
+func next(counter: Counter) -> Bool {
     counter.value = counter.value + 1
     counter.value <= 3
 }
 
 func main() -> Int {
-    while false { assert(false, "false condition entered the loop") }
+    while false {
+        assert(false, "false condition entered the loop")
+    }
     let active = true
     let iterations = 0
     while active {
@@ -14,7 +18,9 @@ func main() -> Int {
     }
     assert(iterations == 1)
 
-    let counter = Counter { value: 0 }
+    let counter = Counter {
+        value: 0
+    }
     let visits = 0
     while next(ref counter) {
         visits = visits + 1

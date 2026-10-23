@@ -276,7 +276,7 @@ A call may have both kinds of effect.
 A borrowed closure can escape only if its group relationship appears in the result type:
 
 ```foster
-func make_renamer(person: ref[person] Person)
+func make_renamer(person: Person)
     -> func(String) -> () [mut person]
 {
     [ref person] (name: String) -> {

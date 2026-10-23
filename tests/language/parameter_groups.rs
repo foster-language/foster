@@ -5,6 +5,93 @@ const NESTED_REFERENCE_CALLS: &str =
     include_str!("../fixtures/programs/nested_reference_calls.fos");
 
 #[test]
+fn implicit_parameter_storage_allows_purer_method_implementations() {
+    assert_eq!(
+        foster::run(include_str!(
+            "../fixtures/programs/implicit_parameter_contracts.fos"
+        ))
+        .unwrap(),
+        Value::Integer(42)
+    );
+}
+
+#[test]
+fn redundant_incoming_reference_annotations_are_rejected() {
+    for source in [
+        "func borrow(foo: ref[foo] Int) -> ref[foo] Int { ref foo }",
+        "type Contract = { pub func borrow(foo: ref[foo] Int) -> ref[foo] Int }",
+        "type Item = {}\nimpl Item { func use(foo: ref[foo] Int) -> () { () } }",
+        "type Item = {}\nimpl Item { static func use(foo: ref[foo] Int) -> () { () } }",
+        "func main() -> Int { let callback = (foo: ref[foo] Int) -> foo\n42 }",
+    ] {
+        let error = foster::parse(source).unwrap_err();
+        assert!(error.message.contains("redundant `ref[foo]`"), "{error}");
+        assert!(foster::formatter::format(source).is_err());
+    }
+}
+
+#[test]
+fn explicit_reference_relationships_remain_available() {
+    let source = r#"
+func select(owner: Int, view: ref[owner] Int) -> ref[owner] Int { ref view }
+func main() -> Int {
+    let original = 42
+    let selected = select(original, ref original)
+    selected.copy()
+}
+"#;
+    assert_eq!(foster::run(source).unwrap(), Value::Integer(42));
+    let formatted = foster::formatter::format(source).unwrap();
+    assert!(formatted.contains("view: ref[owner] Int"));
+    let nested = "func use(items: List<ref[items] Int>, callback: func(ref[items] Int) -> ref[items] Int) -> () { () }";
+    let formatted = foster::formatter::format(nested).unwrap();
+    assert!(formatted.contains("items: List<ref[items] Int>"));
+    assert!(formatted.contains("func(ref[items] Int) -> ref[items] Int"));
+}
+
+#[test]
+fn borrowed_contract_arguments_preserve_generic_reference_provenance() {
+    let source = r#"
+type Value = { pub value: Int }
+func borrowed(item: Value) -> ref[item] Value { ref item }
+func inspect(item: Value) -> Int { item.value }
+func identity<T & Value>(item: T) -> T { item }
+func main() -> Int {
+    let item = Value { value: 42 }
+    let result = identity(borrowed(item))
+    inspect(result)
+}
+"#;
+    assert_eq!(foster::run(source).unwrap(), Value::Integer(42));
+    let escaped = source.replace(
+        "let item = Value { value: 42 }\n    let result = identity(borrowed(item))",
+        "let result = :work { let item = Value { value: 42 }\nidentity(borrowed(item)) }",
+    );
+    let error = foster::compile(&escaped).unwrap_err();
+    assert_eq!(error.code.as_deref(), Some("E0401"), "{error}");
+}
+
+#[test]
+fn reference_constraint_checks_preserve_self_result_obligations() {
+    let error = foster::compile(
+        r#"
+pub type Copyable = { pub value: Int, pub func duplicate() -> Self }
+impl Copyable {
+    pub func duplicate() -> Self { Copyable { value: self.value } }
+}
+func borrowed(item: Copyable) -> ref[item] Copyable { ref item }
+func identity<T & Copyable>(item: T) -> T { item }
+func main() -> Int {
+    let item = Copyable { value: 42 }
+    identity(borrowed(item)).value
+}
+"#,
+    )
+    .unwrap_err();
+    assert!(error.message.contains("duplicate"), "{error}");
+}
+
+#[test]
 fn nested_reference_calls_preserve_original_storage() {
     assert_eq!(
         foster::run(NESTED_REFERENCE_CALLS).unwrap(),
@@ -39,7 +126,7 @@ fn parameter_names_expose_storage_without_group_declarations() {
 #[test]
 fn parameter_groups_reject_wrong_origins_and_expired_storage() {
     for source in [
-        "func borrow(value: ref[value] Int) -> ref[value] Int { ref value }\nfunc main() { let values = [1]\nlet selected = borrow(values[0])\nvalues.push(2)\nselected.copy() }",
+        "func borrow(value: Int) -> ref[value] Int { ref value }\nfunc main() { let values = [1]\nlet selected = borrow(values[0])\nvalues.push(2)\nselected.copy() }",
         "type Item = { value: Int }\nfunc borrow(item: Item) -> ref[item] Item { ref item }\nfunc main() { let callback = borrow\nlet escaped = :work { let local = Item { value: 1 }\ncallback(local) }\nescaped.value }",
         "type Item = { value: Int }\nfunc bad(left: Item, right: Item) -> ref[left] Item { ref right }",
         "type Item = { value: Int }\nfunc bad(value: Item) -> ref[missing] Item { ref value }",

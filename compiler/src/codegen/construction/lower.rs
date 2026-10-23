@@ -1462,7 +1462,17 @@ impl FunctionCompiler<'_> {
                 match_generic_types(self.types, signature.result, actual, &mut substitutions);
             }
         }
+        let callee = match self.hir.expressions[result] {
+            hir::Expr::Call { callee, .. } => callee,
+            _ => result,
+        };
+        if let Some(arguments) = self.types.callable_type_arguments.get(&callee) {
+            for (name, ty) in arguments {
+                substitutions.entry(name.clone()).or_insert(*ty);
+            }
+        }
         let mut names = std::collections::BTreeSet::new();
+        names.extend(substitutions.keys().cloned());
         for parameter in &signature.parameters {
             collect_generic_names(self.types, parameter.ty, &mut names);
         }

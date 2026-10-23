@@ -1,20 +1,20 @@
 import core.list
 
-func preserve(value: ref[value] Int) -> ref[value] Int {
+func preserve(value: Int) -> ref[value] Int {
     ref value
 }
 
-func relay(value: ref[value] Int) -> ref[value] Int {
+func relay(value: Int) -> ref[value] Int {
     preserve(value)
 }
 
-func set(value: ref[value] Int, replacement: Int) -> Int [mut value] {
+func set(value: Int, replacement: Int) -> Int [mut value] {
     value = replacement
 }
 
 type Writer = {}
 impl Writer {
-    func set(value: ref[value] Int, replacement: Int) -> Int [mut value] {
+    func set(value: Int, replacement: Int) -> Int [mut value] {
         value = replacement
     }
 }

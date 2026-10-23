@@ -1,7 +1,7 @@
 # Foster semantic specification
 
 Status: **draft normative specification**, revision 11, 2026-10-06.
-Baseline: **language version 23, ownership-model version 5**.
+Baseline: **language version 24, ownership-model version 5**.
 
 This specification states the observable meaning of Foster programs independently of the VM,
 Cranelift, reference counting, or physical layouts. It consolidates existing contracts; publishing
@@ -342,6 +342,12 @@ temporaries do not need that marker. Borrowed parameters with mutation effects a
 place rather than an independently detached callee copy. Consuming an adapted structural view
 consumes its underlying value, including ownership not exposed by the narrower contract.
 
+Each parameter implicitly names its incoming storage group. Its outer type must
+not redundantly repeat that group. Explicit reference groups remain available in
+results, nested types, and parameters tied to another parameter's group.
+Copyable values still use their caller's place when a borrowed call mutates them;
+pass an explicit copy to mutate an independent temporary instead.
+
 Callable types preserve consumption positionally, for example `func(consume String) -> ()`.
 Direct calls, methods, closures, and indirect calls must respect the same parameter contract.
 
@@ -362,7 +368,7 @@ not been invalidated. A reference observes its live place, not a snapshot; it mu
 retarget to replacement storage. A derived loan cannot outlive any possible parent loan.
 Validity does not itself grant mutation permission.
 
-An explicit structural reference parameter retains the argument's original place
+A borrowed structural contract parameter retains the argument's original place
 and storage layout. Its annotation constrains the operations available to the
 body; conformance is checked at calls. Passing the reference must not copy the
 value into a temporary with the contract's declared layout. Independent parameters

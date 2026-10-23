@@ -24,20 +24,20 @@ impl Other {
         }
     }
 }
-func update(item: ref[item] Replace) -> () {
+func update(item: Replace) -> () {
     item.replace(21)
 }
-func forward(item: ref[item] Replace) -> () {
+func forward(item: Replace) -> () {
     update(item)
 }
-func captured(item: ref[item] Replace) -> () {
+func captured(item: Replace) -> () {
     let change = [ref item] () -> {
         item.replace(21)
         ()
     }
     change()
 }
-func pair(left: ref[left] Replace, right: ref[right] Replace) -> () {
+func pair(left: Replace, right: Replace) -> () {
     forward(left)
     forward(right)
     captured(left)

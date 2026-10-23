@@ -33,7 +33,7 @@ func main() -> Int {
 fn explicit_receivers_and_module_static_functions_are_rejected() {
     for source in [
         "type Item = {}\nimpl Item { func get(self: Self) {} }",
-        "type Item = {}\nimpl Item { func get(self: ref[self] Self) {} }",
+        "type Item = {}\nimpl Item { func get(self: Self) {} }",
         "type Item = { func get(self: Self) -> Int }",
         "static func main() {}",
         "pub static func main() {}",
@@ -207,9 +207,7 @@ func main() -> Int {
 #[test]
 fn receiver_replacement_requires_a_reshaping_contract() {
     let source = "type Item = { value: Int }\nimpl Item { func replace() -> () [mut self] { self = Item { value: 42 } } }\nfunc main() -> Int { 42 }";
-    let error = foster::compile(source)
-        .err()
-        .expect("replacement must require reshaping");
+    let error = foster::compile(source).expect_err("replacement must require reshaping");
     assert!(error.message.contains("reshape"), "{error}");
 }
 
@@ -242,8 +240,6 @@ impl Item {
 }
 func main() -> Int { 42 }
 "#;
-    let error = foster::compile(source)
-        .err()
-        .expect("replacement must require reshaping");
+    let error = foster::compile(source).expect_err("replacement must require reshaping");
     assert!(error.message.contains("reshape"), "{error}");
 }

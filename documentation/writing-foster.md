@@ -34,7 +34,9 @@ func duplicate<T & Copy>(value: T) -> T [read value] { value.copy() }
 func main() -> Int { duplicate(42) }
 ```
 
-A reference parameter can name a structural contract directly. The argument must
+A borrowed parameter can name a structural contract directly. Its name already
+defines its incoming storage group; write `item: Replace` without repeating that
+group in its parameter type. The argument must
 satisfy that contract; the body can use the fields, methods, and effects it
 guarantees. The reference still reaches the original argument's storage. Passing
 it does not copy the item or change its layout to the contract's declaration.
@@ -46,7 +48,7 @@ type Item = & Replace & { value: Int }
 impl Item {
     func replace(value: Int) -> () [reshape self] { self = Item { value } }
 }
-func update(item: ref[item] Replace) -> () { item.replace(42) }
+func update(item: Replace) -> () { item.replace(42) }
 func main() -> Int {
     let item = Item { value: 1 }
     update(item)
@@ -55,7 +57,7 @@ func main() -> Int {
 ```
 
 Use a named constrained parameter such as `T & Replace` when other parts of the
-signature need to refer to the same argument type. Separate reference parameters
+signature need to refer to the same argument type. Separate borrowed parameters
 with the same contract may receive arguments with different layouts.
 Fields in the contract can be updated individually. Replacing the entire item
 requires an operation supplied by its contract, since the caller may have
@@ -71,7 +73,7 @@ have the same shape. Default implementations do not change these obligations.
 ```foster
 type Value = { pub value: Int }
 type Item = { pub extra: Int, pub value: Int }
-func borrowed(item: ref[item] Value) -> ref[item] Value { ref item }
+func borrowed(item: Value) -> ref[item] Value { ref item }
 func main() -> Int {
     let item = Item { extra: 9, value: 40 }
     let result = borrowed(item)
@@ -459,7 +461,7 @@ import core.string.String
 
 type Counter = { value: Int }
 
-func bump(counter: ref[counter] Counter) -> () [mut counter] {
+func bump(counter: Counter) -> () [mut counter] {
     counter.value = counter.value + 1
 }
 
@@ -633,6 +635,9 @@ func main() -> Int { positive(42) }
 ## Parameter storage groups
 
 Every parameter name is available in `ref[name]`; `self` follows the same rule.
+Use explicit groups in returns, nested types, and relationships to another
+parameter, such as `view: ref[owner] T`. Repeating a parameter's own group on its
+outer type is rejected.
 A returned borrow can name an ordinary argument without a separate group declaration.
 Named blocks define lexical groups for local storage. Incoming parameters retain dependencies
 on caller storage; their borrows cannot outlive its owner. An inner block does not

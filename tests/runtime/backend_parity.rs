@@ -2,6 +2,15 @@
 use foster::{native, vm};
 
 #[test]
+fn implicit_parameter_storage_allows_purer_method_implementations() {
+    check(
+        "implicit-parameter-contracts",
+        include_str!("../fixtures/programs/implicit_parameter_contracts.fos"),
+        Ok("42"),
+    );
+}
+
+#[test]
 fn integer_ranges_handle_large_results_and_signed_boundaries() {
     check(
         "integer-ranges",
@@ -614,7 +623,7 @@ fn scalar_optimization_preserves_mutation_and_reference_aliases() {
     check(
         "scalar-barriers",
         r#"
-func update(value: ref[value] Int) -> Int [mut value] {
+func update(value: Int) -> Int [mut value] {
     let before = 20 + 22
     value = value + 1
     let after = 3 * 4
@@ -758,8 +767,8 @@ fn dynamic_callable_selection_preserves_shared_reference_results() {
     check_stdout(
         "dynamic-callable-selection",
         r#"
-func first(left: ref[left] Int, right: ref[left] Int) -> ref[left] Int { ref left }
-func also_first(left: ref[left] Int, right: ref[left] Int) -> ref[left] Int { ref left }
+func first(left: Int, right: ref[left] Int) -> ref[left] Int { ref left }
+func also_first(left: Int, right: ref[left] Int) -> ref[left] Int { ref left }
 func choose(index: Int, flag: Bool) -> Int {
     let left = [21]
     let right = [99]
@@ -827,7 +836,7 @@ import static core.int.*
 type Pair = { left: Int, right: Int }
 func identity<T>(value: T) -> T [consume value] { value }
 func copied(value: int::Int) -> int::Int { value.copy() }
-func update(value: ref[value] Int) -> () [mut value] { value = value.copy() + 1
+func update(value: Int) -> () [mut value] { value = value.copy() + 1
     () }
 func main() -> Int {
     let minimum = -9223372036854775807 - 1
@@ -862,8 +871,8 @@ fn constant_index_callable_selection_preserves_reference_results() {
     check_stdout(
         "constant-callable-index",
         r#"
-func first(left: ref[left] Int, right: ref[left] Int) -> ref[left] Int { ref left }
-func second(left: ref[left] Int, right: ref[left] Int) -> ref[left] Int { ref right }
+func first(left: Int, right: ref[left] Int) -> ref[left] Int { ref left }
+func second(left: Int, right: ref[left] Int) -> ref[left] Int { ref right }
 func choose_first() -> () {
     let left = [10]
     let right = [32]
@@ -903,7 +912,7 @@ func choose(ready: Bool, allowed: Bool) -> Int {
     branch { not ready || not allowed -> selected
         _ -> 0 }
 }
-func tick(count: ref[count] Int) -> Bool [mut count] {
+func tick(count: Int) -> Bool [mut count] {
     count = count + 1
     true
 }
@@ -2217,7 +2226,7 @@ fn borrowed_temporaries_share_the_complete_full_expression() {
         r#"
 func make(value: Int) -> Int { value }
 
-func combine(first: ref[first] Int, second: ref[second] Int) -> Int {
+func combine(first: Int, second: Int) -> Int {
     first * 10 + second
 }
 
@@ -2263,7 +2272,7 @@ impl Counter {
         self.value
     }
 }
-func set(value: ref[value] Int, replacement: Int) -> Int [mut value] {
+func set(value: Int, replacement: Int) -> Int [mut value] {
     value = replacement
 }
 func take(value: String) -> () [consume value] { () }
@@ -2831,7 +2840,7 @@ type Holder<T> = { callback: T }
 func describe(value: Int) -> String { "number" }
 func make() -> func(Int) -> String { describe }
 func invoke(callback: func(Int) -> String, value: Int) -> String { callback(value) }
-func first(left: ref[left] Int, right: ref[left] Int) -> ref[left] Int { ref left }
+func first(left: Int, right: ref[left] Int) -> ref[left] Int { ref left }
 func main() -> Int {
     let values = [10]
     let selected = ref values[0]
@@ -2876,7 +2885,7 @@ func choose(a: Bool, b: Bool) -> Int {
     branch { not a || not b -> selected
  _ -> 0 }
 }
-func bump(count: ref[count] Int) -> Bool [mut count] {
+func bump(count: Int) -> Bool [mut count] {
     count = count + 1
     true
 }
@@ -2940,7 +2949,7 @@ import core.string.*
 import static core.string.*
 type Item = { text: String, number: Int }
 impl Item { func copy() -> Self { Item { text: self.text.copy(), number: self.number } } }
-func rename(items: ref[items] List<Item>) -> () [mut items] {
+func rename(items: List<Item>) -> () [mut items] {
     items[0].text = "after"
     ()
 }
@@ -3036,7 +3045,7 @@ fn nested_indexed_writes_support_generic_and_callable_fields() {
         "nested-index-generic",
         r#"
 type Box<T> = { value: T }
-func set<T>(items: ref[items] List<Box<T>>, value: T) -> () [mut items, consume value] { items[0].value = value
+func set<T>(items: List<Box<T>>, value: T) -> () [mut items, consume value] { items[0].value = value
 () }
 func first(value: Int) -> Int { value }
 func second(value: Int) -> Int { value + 1 }
@@ -3634,7 +3643,7 @@ fn compiled_contract_reference_results_preserve_returned_storage() {
 import contracts.Value
 import static contracts.forwarded
 type Actual = & Value & { pub extra: String }
-func bump(item: ref[item] Value) -> () { item.value = item.value + 2 }
+func bump(item: Value) -> () { item.value = item.value + 2 }
 func main() -> Int {
     let item = Actual { extra: "preserved", value: 40 }
     let answer = forwarded(item)

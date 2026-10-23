@@ -68,6 +68,14 @@ pub(in crate::native) fn lower_shared_to_native_ir(
                 .flatten()
         })
         .collect::<HashMap<_, _>>();
+    let borrowed_homes = shared
+        .parameters
+        .iter()
+        .zip(&metadata.parameters)
+        .filter(|(_, parameter)| parameter.mode == crate::ast::ParameterMode::Borrow)
+        .filter_map(|(value, _)| shared.values.hint(value.index()))
+        .chain(reference_homes.keys().copied())
+        .collect::<BTreeSet<_>>();
     let inferred = infer_value_types(
         shared,
         &function_signature.parameters,
@@ -161,7 +169,7 @@ pub(in crate::native) fn lower_shared_to_native_ir(
             &mut values,
             &uses,
             &mut entry_seeds,
-            &reference_homes,
+            &borrowed_homes,
             environment,
         );
         for (instruction, span) in borrowed_reads
@@ -787,7 +795,7 @@ fn borrow_scalar_field_reads(
     values: &mut ir::ValueBuilder,
     uses: &HashMap<ir::Value, usize>,
     entry_seeds: &mut Vec<ir::Value>,
-    reference_homes: &HashMap<u16, ir::Value>,
+    borrowed_homes: &BTreeSet<u16>,
     environment: NativeIrEnvironment<'_>,
 ) -> Vec<ir::SpannedInstruction> {
     let mut result = Vec::with_capacity(instructions.len());
@@ -800,13 +808,13 @@ fn borrow_scalar_field_reads(
                 field,
                 by_reference: false,
             }) = &load.instruction
-            // Lifetime lowering may end a borrowed receiver immediately after
-            // the field projection. Such a marker owns nothing. Never cross an
-            // owned receiver's release or any other observable instruction.
+            // Keep borrowed parameter owners live through the checked read.
+            // Their caller retains the value for the call. Other owned releases
+            // and observable instructions remain barriers to this fusion.
             && let Some(read_position) = remaining.iter().position(|entry| !matches!(
                 &entry.instruction,
                 ir::Instruction::Portable(ir::PortableInstruction::Drop { value })
-                    if values.hint(value.index()).is_some_and(|home| reference_homes.contains_key(&home))
+                    if values.hint(value.index()).is_some_and(|home| borrowed_homes.contains(&home))
             ))
             && let read = &remaining[read_position]
             && let ir::Instruction::Portable(ir::PortableInstruction::Index {
@@ -847,7 +855,6 @@ fn borrow_scalar_field_reads(
             values[storage.index()] = NativeType::Unit;
             values.set_storage_hint(*storage, None);
             entry_seeds.push(*storage);
-            result.extend_from_slice(&remaining[..read_position]);
             result.push(
                 ir::Instruction::BorrowedFieldIndex {
                     destination: *destination,
@@ -857,6 +864,7 @@ fn borrow_scalar_field_reads(
                 }
                 .with_span(read.span.clone()),
             );
+            result.extend_from_slice(&remaining[..read_position]);
             result.extend_from_slice(&tail[..drop_position]);
             cursor += 3 + read_position + drop_position;
             continue;

@@ -1261,8 +1261,13 @@ A reference is parameterized by a group describing its possible target locations
 ref[people] Person
 ```
 
-The pointee annotation is a contract on the argument. For example,
-`func update(item: ref[item] Replace)` accepts an argument satisfying `Replace`
+Parameters borrow by default and implicitly name their incoming groups. Repeating
+a parameter's own group on its outer type is rejected. Keep explicit groups for
+results, nested types, and cross-parameter relationships such as
+`view: ref[owner] T`.
+
+The parameter annotation is a contract on the argument. For example,
+`func update(item: Replace)` accepts an argument satisfying `Replace`
 while retaining a reference to that argument's original storage. Its body is
 checked against the declared contract, including its accessible fields, required
 methods, and effects. The call does not convert the item's layout to that of the
@@ -1289,7 +1294,7 @@ Reference types do not contain mutability. Mutation is an effect performed by a 
 
 ```foster
 func rename(
-    person: ref[person] Person,
+    person: Person,
     name: String,
 ) -> () [mut person] {
     person.name = name

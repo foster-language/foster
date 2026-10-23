@@ -2491,7 +2491,7 @@ func main() -> Int {
 
     let borrowed_temporary = foster::run(
         r#"
-func length(value: ref[value] Bytes) -> Int { value.length }
+func length(value: Bytes) -> Int { value.length }
 func main() -> Int {
     let text = "λ"
     length(ref text.bytes)

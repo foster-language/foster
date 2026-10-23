@@ -769,7 +769,7 @@ fn ownership_and_effect_contracts_survive_import() {
     w.library(
         r#"
 pub func preserve(value: Int) -> ref[value] Int { ref value }
-pub func observe(value: ref[value] Int) -> Int { value }
+pub func observe(value: Int) -> Int { value }
 pub func append(values: List<Int>) -> () { values.push(30) }
 "#,
     );

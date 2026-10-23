@@ -48,7 +48,7 @@ fn for_matches_an_explicit_iterator_and_option_loop() {
 import core.option.*
 import static core.option.*
             type Calls = {{ count: Int }}
-            func values(calls: ref[calls] Calls) -> List<Int> {{
+            func values(calls: Calls) -> List<Int> {{
                 calls.count = calls.count + 1
                 [1, 2, 3, 4, 5]
             }}

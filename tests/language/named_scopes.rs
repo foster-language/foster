@@ -69,7 +69,7 @@ func main() -> Int {
 fn named_scopes_keep_effects_and_symbol_headers() {
     let source = r#"
 type Box = { value: Int }
-func update(value: ref[value] Box) -> () [mut value.value] {
+func update(value: Box) -> () [mut value.value] {
     :work { value.value = 42 }
 }
 func main() -> Int {

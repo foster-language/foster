@@ -114,7 +114,7 @@ import static core.option.*
 import core.list
 import core.list.*
 import static core.list.*
-func selected(values: ref[values] List<Int>) -> Option<ref[values] Int> {
+func selected(values: List<Int>) -> Option<ref[values] Int> {
     values.borrow(0)
 }
 

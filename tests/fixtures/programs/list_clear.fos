@@ -19,7 +19,7 @@ impl Counter {
     }
 }
 
-func clear_borrowed(values: ref[values] List<Int>) -> () [reshape values.items] {
+func clear_borrowed(values: List<Int>) -> () [reshape values.items] {
     values.clear()
 }
 

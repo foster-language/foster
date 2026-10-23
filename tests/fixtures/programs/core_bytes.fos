@@ -18,7 +18,7 @@ type Packet = {
     bytes: Int
 }
 
-func borrowed_bytes(value: ref[value] Int) -> Bytes [read value] {
+func borrowed_bytes(value: Int) -> Bytes [read value] {
     value.bytes
 }
 

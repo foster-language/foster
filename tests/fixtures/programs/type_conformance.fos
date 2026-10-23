@@ -78,14 +78,14 @@ func duplicate<T>(value: T) -> Option<T> [read value] {
     }
 }
 
-func increment<T>(value: ref[value] T) -> () [mut value] {
+func increment<T>(value: T) -> () [mut value] {
     branch value {
         is Incrementable -> value.increment()
         _ -> ()
     }
 }
 
-func set_value<T>(value: ref[value] T) -> () [mut value] {
+func set_value<T>(value: T) -> () [mut value] {
     branch value {
         is HasValue -> {
             value.value = 41

@@ -209,7 +209,14 @@ pub(super) fn function_signature(
         .map(|(index, local)| {
             let ty = signature
                 .and_then(|signature| signature.parameters.get(index))
-                .map(|ty| compilation.types.display(ty.ty))
+                .map(|ty| {
+                    compilation
+                        .types
+                        .display(compilation.types.parameter_annotation_type(
+                            &compilation.hir.locals[local.local].name,
+                            ty.ty,
+                        ))
+                })
                 .unwrap_or_else(|| "_".into());
             let consumed = signature
                 .and_then(|signature| signature.parameters.get(index).map(|p| &p.mode))

@@ -4,7 +4,7 @@ use super::*;
 
 impl Checker<'_> {
     pub(super) fn finish(mut self) -> Result<TypeInformation, FosterError> {
-        self.validate_constraint_uses()?;
+        let callable_type_arguments = self.validate_constraint_uses()?;
         let called = self
             .hir
             .expressions
@@ -90,6 +90,19 @@ impl Checker<'_> {
             ..TypeInformation::default()
         };
         let mut interner = HashMap::new();
+        for (expression, arguments) in callable_type_arguments {
+            let arguments = arguments
+                .into_iter()
+                .filter_map(|(name, ty)| {
+                    let ty = self.resolved(ty);
+                    (!contains_variable(&ty))
+                        .then(|| (name, intern_type(&mut information, &mut interner, ty)))
+                })
+                .collect();
+            information
+                .callable_type_arguments
+                .insert(expression, arguments);
+        }
         for (name, contract) in &self.reference_contracts {
             let contract = intern_type(
                 &mut information,

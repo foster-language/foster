@@ -12,7 +12,7 @@ fn callbacks_stored_in_captured_containers_keep_their_effects() {
         r#"
 import core.list
 import std.iter.map
-func invalid(value: ref[value] Int) -> List<Int> [read value] {
+func invalid(value: Int) -> List<Int> [read value] {
     let actions = []
     actions.push([ref value] () -> { value = value + 1
         value })
@@ -81,7 +81,7 @@ fn immediate_capture_callback_obeys_caller_permissions() {
     let error = foster_compiler::compile(
         r#"
 func apply(action: func() -> Int [mut captures]) -> Int { action() }
-func invalid(value: ref[value] Int) -> Int [read value] {
+func invalid(value: Int) -> Int [read value] {
     apply([ref value] () -> { value = value + 1
         value })
 }

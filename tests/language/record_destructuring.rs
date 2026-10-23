@@ -64,7 +64,7 @@ fn computed_source_is_evaluated_once() {
         r#"
 type Counter = { value: Int }
 type Pair = { first: Int, second: Int }
-func make(counter: ref[counter] Counter) -> Pair [mut counter] {
+func make(counter: Counter) -> Pair [mut counter] {
     counter.value = counter.value + 1
     Pair { first: 20, second: 22 }
 }

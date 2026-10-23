@@ -22,10 +22,25 @@ fn reference_contract_signature_keeps_the_source_contract() {
     let function = compilation.hir.function_named(module, "update").unwrap();
     let signature = function_signature(&compilation.into(), function, false);
     assert!(
-        signature.contains("func update(item: ref[item] Replace)"),
+        signature.contains("func update(item: Replace)"),
         "{signature}"
     );
     assert!(!signature.contains("$reference:"), "{signature}");
+}
+
+#[test]
+fn reference_relationship_signature_keeps_explicit_groups() {
+    let compilation = crate::compile(
+        "func select(owner: Int, view: ref[owner] Int) -> ref[owner] Int { ref view }\nfunc main() -> Int { 42 }",
+    ).unwrap();
+    let module = compilation.hir.module_named("main").unwrap();
+    let function = compilation.hir.function_named(module, "select").unwrap();
+    let signature = function_signature(&compilation.into(), function, false);
+    assert!(
+        signature.contains("owner: Int, view: ref[owner] Int"),
+        "{signature}"
+    );
+    assert!(signature.contains("-> ref[owner] Int"), "{signature}");
 }
 
 #[test]

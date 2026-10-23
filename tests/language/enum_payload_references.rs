@@ -52,7 +52,7 @@ func borrow(value: Choice) -> ref[value] Int {
     branch value { Choice.Stored(item) -> ref item
         Choice.Empty -> panic("empty") }
 }
-func observe(value: ref[value] Int) -> Int { value }
+func observe(value: Int) -> Int { value }
 func main() -> Int {
     let choice = Choice.Stored(42)
     let item = borrow(choice)

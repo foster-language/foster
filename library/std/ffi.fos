@@ -26,13 +26,13 @@ import core.string.String
 type CHost = {}
 impl CHost {
     /// Reserves contiguous packet storage without changing its initialized length.
-    static func arguments_reserve(payload: ref[payload] ByteBuffer, capacity: Int) -> () [reshape payload.value.items] = intrinsic("c.arguments_reserve")
+    static func arguments_reserve(payload: ByteBuffer, capacity: Int) -> () [reshape payload.value.items] = intrinsic("c.arguments_reserve")
     /// Appends one little-endian slot directly to packet storage.
-    static func arguments_integer(payload: ref[payload] ByteBuffer, value: Int) -> () [reshape payload.value.items] = intrinsic("c.arguments_integer")
+    static func arguments_integer(payload: ByteBuffer, value: Int) -> () [reshape payload.value.items] = intrinsic("c.arguments_integer")
     /// Appends one binary64 slot directly to packet storage.
-    static func arguments_float(payload: ref[payload] ByteBuffer, value: Float) -> () [reshape payload.value.items] = intrinsic("c.arguments_float")
+    static func arguments_float(payload: ByteBuffer, value: Float) -> () [reshape payload.value.items] = intrinsic("c.arguments_float")
     /// Extends packet storage in one checked bulk operation.
-    static func arguments_bytes(payload: ref[payload] ByteBuffer, value: Bytes) -> () [reshape payload.value.items] = intrinsic("c.arguments_bytes")
+    static func arguments_bytes(payload: ByteBuffer, value: Bytes) -> () [reshape payload.value.items] = intrinsic("c.arguments_bytes")
     /// Copies only initialized packet bytes into an independent immutable snapshot.
     static func arguments_snapshot(payload: ByteBuffer) -> Bytes [read payload.value] = intrinsic("c.arguments_snapshot")
     /// Transfers an adapter into the owner-thread callback registry.

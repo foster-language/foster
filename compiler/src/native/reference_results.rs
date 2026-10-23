@@ -227,7 +227,7 @@ impl NativeProgram<'_> {
                     .iter()
                     .copied()
                     .find(|ty| *ty != placeholder)
-                    .or_else(|| results.iter().next().copied());
+                    .or_else(|| results.first().copied());
                 let Some(retained) = retained else {
                     continue;
                 };
@@ -293,7 +293,7 @@ mod tests {
         let source = r#"
 type Value = { pub value: Int }
 type Wrong = { pub text: String }
-func invalid(item: ref[item] Wrong) -> ref[item] Value { ref item }
+func invalid(item: Wrong) -> ref[item] Value { ref item }
 func main() -> Int { 42 }
 "#;
         let error = crate::compile(source).unwrap_err();
@@ -305,7 +305,7 @@ func main() -> Int { 42 }
         let source = r#"
 type Value = { pub value: Int }
 type Item = { pub extra: Int, pub value: Int }
-func invalid(item: ref[item] Value) -> ref[item] Value {
+func invalid(item: Value) -> ref[item] Value {
     let local = Item { extra: 9, value: 42 }
     ref local
 }

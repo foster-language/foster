@@ -11,7 +11,7 @@ impl Owner {
     }
 }
 
-func read_buffer(values: ref[values] Buffer<Int>) -> Int {
+func read_buffer(values: Buffer<Int>) -> Int {
     values.read(2)
 }
 

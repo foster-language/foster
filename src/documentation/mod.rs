@@ -70,7 +70,24 @@ mod tests {
             .unwrap();
         assert!(!page.html.contains("$reference:"), "{}", page.html);
         assert!(!page.html.contains("update&lt;"));
-        assert!(page.html.contains("item: ref[item]"));
+        assert!(page.html.contains("item: <a"));
+        assert!(!page.html.contains("item: ref[item]"));
+    }
+
+    #[test]
+    fn reference_relationships_appear_in_documentation() {
+        let compilation = crate::compile(
+            "pub func select(owner: Int, view: ref[owner] Int) -> ref[owner] Int { ref view }\nfunc main() -> Int { 42 }",
+        ).unwrap();
+        let site = render::site(&compilation).unwrap();
+        let page = site
+            .modules
+            .iter()
+            .find(|page| page.html.contains("func select("))
+            .unwrap();
+        assert!(!page.html.contains("owner: ref[owner]"));
+        assert!(page.html.contains("view: ref[owner]"));
+        assert!(page.html.contains("-&gt; ref[owner]"));
     }
 
     #[test]

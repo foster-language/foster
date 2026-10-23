@@ -38,7 +38,7 @@ impl Item {
 type Holder = {
     item: Item
 }
-func update<T & Replace>(item: ref[item] T) -> () {
+func update<T & Replace>(item: T) -> () {
     item.replace(42)
 }
 func main() -> Int {

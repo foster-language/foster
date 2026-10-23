@@ -39,7 +39,7 @@ func second(value: Stored) -> ref[value] Item {
         Stored.Items(_, item) -> ref item
     }
 }
-func inspect(value: ref[value] Stored) -> Int {
+func inspect(value: Stored) -> Int {
     branch value {
         Stored.Items({
             value: first

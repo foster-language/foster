@@ -116,6 +116,20 @@ mod tests {
     }
 
     #[test]
+    fn implicit_parameter_storage_allows_purer_method_implementations() {
+        check(include_str!(
+            "../../../tests/fixtures/programs/implicit_parameter_contracts.fos"
+        ));
+    }
+
+    #[test]
+    fn implicit_parameter_storage_retains_composed_default_methods() {
+        check(include_str!(
+            "../../../tests/fixtures/programs/cursor_dispatch.fos"
+        ));
+    }
+
+    #[test]
     fn reference_contract_parameters_preserve_field_layouts() {
         check(include_str!(
             "../../../tests/fixtures/programs/structural_reference_fields.fos"
@@ -127,6 +141,15 @@ mod tests {
         let source = SOURCE.replacen("item.replace(21)", "item.extra()\n()", 1);
         let error = crate::compile(&source).unwrap_err();
         assert!(!error.message.contains("$reference:"));
+    }
+
+    #[test]
+    fn explicit_effect_bounds_cannot_hide_implicit_parameter_mutation() {
+        let source =
+            "func replace(other: Int, value: Int) -> Int [read other] { value = other\nvalue }";
+        let error = crate::compile(source).unwrap_err();
+        assert!(error.message.contains("mut value"), "{error}");
+        crate::compile(&source.replace("[read other]", "[mut value]")).unwrap();
     }
 
     #[test]
@@ -142,7 +165,7 @@ mod tests {
             r#"
 type Value = { pub value: Int }
 type Extended = { pub value: Int, pub extra: Int }
-func replace(item: ref[item] Value) -> () {
+func replace(item: Value) -> () {
     item = Value { value: 42 }
     ()
 }
@@ -172,7 +195,7 @@ func main() -> Int {
             ("type Marker = { pub value: Int }", "Replace & Marker"),
         ] {
             let source =
-                format!("{SOURCE}\n{declaration}").replace("] Replace", &format!("] {annotation}"));
+                format!("{SOURCE}\n{declaration}").replace(": Replace", &format!(": {annotation}"));
             check(&source);
         }
     }
@@ -180,12 +203,12 @@ func main() -> Int {
     #[test]
     fn reference_contract_parameters_support_required_methods() {
         let source = SOURCE.replace("type Replace =", "pub type Replace =").replace("func main() -> Int", r#"
-pub type Updater = { pub func apply(item: ref[item] Replace) -> () [reshape item] }
+pub type Updater = { pub func apply(item: Replace) -> () [reshape item] }
 pub type Implementation = & Updater & {}
 impl Implementation {
-    pub func apply(item: ref[item] Replace) -> () [reshape item] { update(item) }
+    pub func apply(item: Replace) -> () [reshape item] { update(item) }
 }
-func invoke(updater: Updater, item: ref[item] Replace) -> () [reshape item] {
+func invoke(updater: Updater, item: Replace) -> () [reshape item] {
     updater.apply(item)
 }
 func main() -> Int"#).replace("pair(holder.first, holder.second)", "let updater = Implementation {}\ninvoke(updater, holder.first)\ninvoke(updater, holder.second)");

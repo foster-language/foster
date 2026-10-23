@@ -193,7 +193,7 @@ func main() -> Int {
             "mutable-ref-parameter-writes-through-to-caller",
             r#"
 type Person = { name: Int }
-func rename(person: ref[person] Person, name: Int) -> () [mut person.name] {
+func rename(person: Person, name: Int) -> () [mut person.name] {
     person.name = name
     ()
 }
@@ -271,7 +271,7 @@ func main() -> Int {
         (
             "replace-invalidates-captured-call-effect",
             r#"
-func make(value: ref[value] Int) -> func() -> Int [read value] {
+func make(value: Int) -> func() -> Int [read value] {
     [ref value] () -> [read value] { value }
 }
 func main() -> Int {
@@ -285,7 +285,7 @@ func main() -> Int {
         (
             "replace-through-parameter-invalidates-derived-loan",
             r#"
-func replace(value: ref[value] Int) -> Int [mut value] {
+func replace(value: Int) -> Int [mut value] {
     let first = ref value
     value = 42
     first
@@ -426,7 +426,7 @@ func main() -> Int {
 fn mutable_ref_parameter_runtime_witness_updates_the_caller() {
     let source = r#"
 type Person = { name: Int }
-func rename(person: ref[person] Person, name: Int) -> () [mut person.name] {
+func rename(person: Person, name: Int) -> () [mut person.name] {
     person.name = name
     ()
 }
@@ -450,7 +450,7 @@ func main() -> Int {
 fn whole_place_mutable_ref_parameter_survives_optimization() {
     let source = r#"
 type Vals = { value: Int }
-func set(box: ref[box] Vals) -> Int [mut box] {
+func set(box: Vals) -> Int [mut box] {
     box = Vals { value: 7 }
     box.value
 }
@@ -538,7 +538,7 @@ fn bounded_compiler_input_fuzzing_never_panics() {
 #[test]
 fn ownership_dump_and_diagnostics_are_deterministic() {
     let source = r#"
-func preserve(value: ref[value] Int) -> ref[value] Int { ref value }
+func preserve(value: Int) -> ref[value] Int { ref value }
 func main() { 0 }
 "#;
     let first = foster::compile(source).unwrap();
@@ -570,7 +570,7 @@ func main() -> Int {
 
 #[test]
 fn ownership_revision_and_diagnostic_catalog_match_current_contract() {
-    assert_eq!(foster::ownership::LANGUAGE_VERSION, 23);
+    assert_eq!(foster::ownership::LANGUAGE_VERSION, 24);
     assert_eq!(foster::ownership::MODEL_VERSION, 5);
     assert_eq!(
         foster::ownership::diagnostics::CATALOG
@@ -586,14 +586,14 @@ fn ownership_revision_and_diagnostic_catalog_match_current_contract() {
 #[test]
 fn expression_temporaries_live_through_the_borrowing_call() {
     let scoped = r#"
-func observe(item: ref[item] Int) -> Int { item }
+func observe(item: Int) -> Int { item }
 func make() -> Int { 42 }
 func main() -> Int { observe(ref (make())) }
 "#;
     assert_eq!(foster::run(scoped).unwrap(), foster::vm::Value::Integer(42));
 
     let escaped = r#"
-func preserve(item: ref[item] Int) -> ref[item] Int { ref item }
+func preserve(item: Int) -> ref[item] Int { ref item }
 func make() -> Int { 42 }
 func main() -> Int {
     let item = preserve(ref (make()))

@@ -72,7 +72,7 @@ impl Box<T & Copy> {
         duplicate(self.value)
     }
 }
-func inspect(value: ref[value] Box<Int>) -> Int [read value] { value.copied() }
+func inspect(value: Box<Int>) -> Int [read value] { value.copied() }
 func main() -> Int {
     let container = Box { value: 42 }
     inspect(ref container)

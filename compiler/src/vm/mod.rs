@@ -67,11 +67,11 @@ mod tests {
     #[test]
     fn returned_references_preserve_their_live_origin() {
         let source = r#"
-func preserve(value: ref[value] Int) -> ref[value] Int {
+func preserve(value: Int) -> ref[value] Int {
     ref value
 }
 
-func set(value: ref[value] Int, replacement: Int) -> Int [mut value] {
+func set(value: Int, replacement: Int) -> Int [mut value] {
     value = replacement
 }
 
@@ -582,7 +582,7 @@ func main() -> Int {
              }
              func main() -> Int {
                 let original = 1
-                let changed = replace(original)
+                  let changed = replace(original.copy())
                 original + changed
              }",
         )

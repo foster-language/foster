@@ -1,6 +1,6 @@
 # Foster Ownership and Borrowing
 
-Language version 23, ownership-model version 5.
+Language version 24, ownership-model version 5.
 
 This document describes Foster's ownership model, its source-level behavior, and how the compiler
 implements it today. It is intentionally separate from
@@ -221,10 +221,10 @@ pending mode to `copy` for copy types and `move` otherwise.
 
 ## References and groups
 
-A reference type names the group from which it borrows:
+Parameters borrow by default and name their incoming storage groups:
 
 ```foster
-func rename(person: ref[person] Person, name: String)
+func rename(person: Person, name: String)
     -> ()
 {
     person.name = name
@@ -233,9 +233,11 @@ func rename(person: ref[person] Person, name: String)
 ```
 
 `person` is a parameter whose name identifies its incoming storage group.
-`ref[person] Person` says that the reference may refer into that group.
-The pointee annotation supplies the argument's contract, not a replacement
-storage layout. A parameter such as `item: ref[item] Replace` validates the
+Write `person: Person`; repeating its own group on the outer parameter type is
+rejected. Explicit groups express relationships in results, nested types, or
+another parameter, such as `view: ref[person] Person`.
+The type annotation supplies the argument's contract, not a replacement
+storage layout. A parameter such as `item: Replace` validates the
 argument against `Replace` and preserves its original place. The body uses the
 contract's guaranteed operations; specialization keeps the argument's layout
 without copying it or borrowing a converted temporary.
@@ -244,7 +246,7 @@ keeps its original storage; the result annotation restricts accessible operation
 and its group restricts provenance. That group need not contain only values with
 the input's shape: a reference to a child can use its parent's incoming group.
 The inferred `mut person.name` effect says the body may replace that field. A mutable reference
-parameter remains connected to the caller's place, so `rename(ref person, "new name")` updates the
+parameter remains connected to the caller's place, so `rename(person, "new name")` updates the
 caller's `person.name`; it does not detach a callee-local copy. Group names are part of the function contract:
 using a name that is not a parameter is an error in a signature. There is no separate
 group-parameter declaration.
@@ -259,9 +261,9 @@ may escape a function only when its group is exposed by a reference, nested type
 or effect in the declared result type. A reference into a
 frame-local value cannot be returned.
 
-Ordinary borrowed parameters also support result contracts such as
+Borrowed results expose their input dependency in the result contract:
 `func borrow(person: Person) -> ref[person] Person { ref person }`.
-The parameter need not itself have an explicit reference type. A consumed parameter cannot
+A consumed parameter cannot
 supply escaping references because its storage belongs to the callee.
 
 A returned reference can be passed directly to another reference parameter, either as a
@@ -429,7 +431,7 @@ A borrowed capture may escape when it originates from a reference parameter and 
 exposes the same group:
 
 ```foster
-func make_renamer(person: ref[person] Person)
+func make_renamer(person: Person)
     -> func(String) -> () [mut person]
 {
     [ref person] (name: String) -> person.name = name

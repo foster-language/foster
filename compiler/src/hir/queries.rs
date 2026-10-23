@@ -2,6 +2,20 @@ use crate::ast;
 
 use super::{ExprId, LocalId, PackageHir};
 
+/// Borrowed parameters need their caller's place when the result exposes it or
+/// the function can mutate it. The source parameter already names that group.
+pub(crate) fn parameter_requires_storage(
+    name: &str,
+    result: Option<&ast::TypeExpr>,
+    effects: &[ast::Effect],
+) -> bool {
+    type_exposes_group(result, name)
+        || effects.iter().any(|effect| {
+            effect.target.root == name
+                && matches!(effect.kind, ast::EffectKind::Mut | ast::EffectKind::Reshape)
+        })
+}
+
 pub(crate) fn type_exposes_group(ty: Option<&ast::TypeExpr>, group: &str) -> bool {
     match ty {
         Some(ast::TypeExpr::Unit) => false,

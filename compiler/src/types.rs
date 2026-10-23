@@ -154,6 +154,8 @@ pub fn is_reference_parameter(name: &str) -> bool {
 
 #[derive(Debug, Default)]
 pub struct TypeInformation {
+    /// Checked type arguments, including parameters inferred only through layout bounds.
+    pub callable_type_arguments: HashMap<ExprId, HashMap<String, TypeId>>,
     /// Source contracts for the anonymous type parameters of reference parameters.
     pub reference_contracts: HashMap<String, TypeId>,
     /// Runtime inhabitants accepted by the same structural checks as assignment.
@@ -254,6 +256,14 @@ impl TypeInformation {
 
     pub fn expression_type(&self, expression: ExprId) -> Option<TypeId> {
         self.expressions.get(&expression).copied()
+    }
+
+    /// The incoming group is implicit in a source-facing parameter annotation.
+    pub fn parameter_annotation_type(&self, name: &str, ty: TypeId) -> TypeId {
+        match &self.types[ty] {
+            Type::Reference { group, value } if group == name => *value,
+            _ => ty,
+        }
     }
 
     pub fn local_type(&self, local: LocalId) -> Option<TypeId> {

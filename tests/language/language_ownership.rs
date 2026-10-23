@@ -42,7 +42,7 @@ func main() -> Int { inspect(false) }
 fn grouped_effect_paths_match_expanded_contracts() {
     let source = r#"
 type Pair = { left: Int, right: Int }
-func update(pair: ref[pair] Pair) -> () [mut pair(left, right)] {
+func update(pair: Pair) -> () [mut pair(left, right)] {
     pair.left = 3
     pair.right = 4
     ()
@@ -72,7 +72,7 @@ func main() -> Int {
             .contains("undeclared effect")
     );
     for kind in ["read", "mut", "reshape", "consume"] {
-        let text = format!("func f(p: ref[p] Pair) -> () [{kind} p(left, nested.right,)] {{ () }}");
+        let text = format!("func f(p: Pair) -> () [{kind} p(left, nested.right,)] {{ () }}");
         foster::parse(&text).unwrap();
     }
     assert!(foster::parse(&source.replace("mut pair(left, right)", "mut pair()")).is_err());
@@ -83,7 +83,7 @@ fn mutable_defaults_preserve_checked_effects_and_explicit_transfers() {
     let source = r#"
 type Item = { value: Int }
 func inspect(item: Item) -> Int { item.value }
-func update(item: ref[item] Item) -> () {
+func update(item: Item) -> () {
     item.value = item.value + 1
     ()
 }
@@ -134,8 +134,8 @@ func main() -> Int {
             .contains("moved")
     );
     let invalid_bound = source.replace(
-        "func update(item: ref[item] Item) -> ()",
-        "func update(item: ref[item] Item) -> () [read item]",
+        "func update(item: Item) -> ()",
+        "func update(item: Item) -> () [read item]",
     );
     assert!(
         foster::compile(&invalid_bound)
@@ -472,7 +472,7 @@ fn remote_calls_reject_borrowed_messages() {
 type Box = { value: Int }
 
 impl Box {
-    func read(value: ref[value] Int) -> Int {
+    func read(value: Int) -> Int {
         value
     }
 }
@@ -517,7 +517,7 @@ func main() {
 #[test]
 fn derives_and_checks_group_mutation_effects() {
     let source = r#"
-func replace(value: ref[value] Int) -> Int {
+func replace(value: Int) -> Int {
     value = 2
     value
 }
@@ -537,11 +537,11 @@ func main() { 0 }
 #[test]
 fn propagates_declared_effects_through_calls() {
     let source = r#"
-func replace(value: ref[value] Int) -> Int [mut value] {
+func replace(value: Int) -> Int [mut value] {
     value = 2
     value
 }
-func wrapper(value: ref[value] Int) -> Int {
+func wrapper(value: Int) -> Int {
     replace(ref value)
 }
 func main() { 0 }
@@ -603,7 +603,7 @@ fn supports_dotted_effects_and_rejects_non_method_self_effects() {
     foster::compile(
         r#"
 type Box = { value: Int }
-func update(box: ref[box] Box) -> Int [mut box.value] {
+func update(box: Box) -> Int [mut box.value] {
     box.value = box.value + 1
     box.value
 }
@@ -623,12 +623,12 @@ func main() { 0 }
 #[test]
 fn instantiates_multiple_groups_independently() {
     let source = r#"
-func transfer(from: ref[from] Int, to: ref[to] Int) -> Int [read from, mut to] {
+func transfer(from: Int, to: Int) -> Int [read from, mut to] {
     to = from
     to
 }
 
-func wrapper(from: ref[from] Int, to: ref[to] Int) -> Int [read from, mut to] {
+func wrapper(from: Int, to: Int) -> Int [read from, mut to] {
     transfer(ref from, ref to)
 }
 func main() { 0 }
@@ -643,7 +643,7 @@ func main() { 0 }
 #[test]
 fn supports_explicit_closure_effect_contracts() {
     let source = r#"
-func make(value: ref[value] Int) -> func() -> Int [mut value] {
+func make(value: Int) -> func() -> Int [mut value] {
     [ref value] () -> [mut value] {
         value = value + 1
         value
@@ -661,7 +661,7 @@ func main() { 0 }
 #[test]
 fn returned_ref_capture_uses_the_original_projected_place() {
     let source = r#"
-func incrementer(value: ref[value] Int) -> func() -> Int [mut value] {
+func incrementer(value: Int) -> func() -> Int [mut value] {
     [ref value] () -> [mut value] {
         value = value + 1
         value
@@ -689,7 +689,7 @@ func main() -> Int {
 #[test]
 fn derives_consume_from_move_out() {
     let missing = r#"
-func take(value: ref[value] Int) -> Int { move value }
+func take(value: Int) -> Int { move value }
 func main() { 0 }
 "#;
     let compilation = foster::compile(missing).unwrap();
@@ -704,7 +704,7 @@ func main() { 0 }
     foster::compile(&declared).unwrap();
 
     let reused = r#"
-func take(value: ref[value] Int) -> Int [read value, consume value] {
+func take(value: Int) -> Int [read value, consume value] {
     let result = move value
     value
 }
@@ -1260,7 +1260,7 @@ func main() -> Int {
 
     let borrowed = foster::compile(
         r#"
-func observe(item: ref[item] Int, extra: Int) -> Int { item + extra }
+func observe(item: Int, extra: Int) -> Int { item + extra }
 func main() -> Int {
     let value = 1
     let add_value = observe(ref value, _)
@@ -1279,7 +1279,7 @@ func main() -> Int {
     let temporary = foster::compile(
         r#"
 func make() -> Int { 1 }
-func observe(item: ref[item] Int, extra: Int) -> Int { item + extra }
+func observe(item: Int, extra: Int) -> Int { item + extra }
 func main() -> Int {
     let add_value = observe(ref (make()), _)
     add_value(3)
@@ -1338,7 +1338,7 @@ fn preserves_group_effects_when_callable_representation_is_inferred() {
     use foster::types::Type;
 
     let source = r#"
-func make(person: ref[person] Int)
+func make(person: Int)
     -> func(Int) -> Int [mut person]
 {
     [ref person] (value: Int) -> [mut person] {
@@ -1408,7 +1408,7 @@ func main() -> Int {
 #[test]
 fn binding_a_projected_reference_preserves_its_live_place() {
     let source = r#"
-func set(value: ref[value] Int, next: Int) -> Int [mut value] {
+func set(value: Int, next: Int) -> Int [mut value] {
     value = next
 }
 
@@ -1968,7 +1968,7 @@ func main() -> Int {
 #[test]
 fn ownership_mir_records_result_provenance_summaries() {
     let source = r#"
-func preserve(value: ref[value] Int) -> ref[value] Int {
+func preserve(value: Int) -> ref[value] Int {
     ref value
 }
 
@@ -2068,7 +2068,7 @@ func main() -> Int {
 #[test]
 fn ownership_mir_records_reborrow_parent_relationships() {
     let source = r#"
-func preserve(value: ref[value] Int) -> ref[value] Int {
+func preserve(value: Int) -> ref[value] Int {
     ref value
 }
 
@@ -2089,7 +2089,7 @@ func main() { 0 }
 #[test]
 fn nested_reborrow_of_parameter_is_not_a_local_escape() {
     let source = r#"
-func preserve(value: ref[value] Int) -> ref[value] Int {
+func preserve(value: Int) -> ref[value] Int {
     let first = ref value
     ref first
 }
@@ -2178,7 +2178,7 @@ type Pair = {
     right: List<Int>
 }
 
-func grow(pair: ref[pair] Pair) -> () [reshape pair.left.items] {
+func grow(pair: Pair) -> () [reshape pair.left.items] {
     pair.left.push(30)
 }
 
@@ -2279,7 +2279,7 @@ func main() -> Int {
 #[test]
 fn direct_borrowed_call_results_substitute_parameter_provenance() {
     let source = r#"
-func preserve(value: ref[value] Int) -> ref[value] Int {
+func preserve(value: Int) -> ref[value] Int {
     ref value
 }
 
@@ -2487,7 +2487,7 @@ func invalid() {
 #[test]
 fn checks_callable_effect_bounds() {
     let source = r#"
-func invalid(value: ref[value] Int)
+func invalid(value: Int)
     -> func(Int) -> Int [read value]
 {
     [ref value] (next: Int) -> {
@@ -2503,7 +2503,7 @@ func invalid(value: ref[value] Int)
 #[test]
 fn passes_projected_references_to_group_parameterized_functions() {
     let source = r#"
-func set(value: ref[value] Int, next: Int) -> Int [mut value] {
+func set(value: Int, next: Int) -> Int [mut value] {
     value = next
     value
 }
@@ -2521,7 +2521,7 @@ func main() -> Int {
 #[test]
 fn result_provenance_is_inferred_from_reachable_mir_returns() {
     let source = r#"
-func first(left: ref[left] Int, right: ref[right] Int)
+func first(left: Int, right: Int)
     -> func() -> Int [read left, read right]
 {
     [ref left] () -> [read from] { left }
@@ -2543,11 +2543,11 @@ func main() { 0 }
 #[test]
 fn direct_calls_propagate_inferred_result_provenance_to_a_fixpoint() {
     let source = r#"
-func constant(value: ref[value] Int) -> func() -> Int [read value] {
+func constant(value: Int) -> func() -> Int [read value] {
     () -> 1
 }
 
-func relay(value: ref[value] Int) -> func() -> Int [read value] {
+func relay(value: Int) -> func() -> Int [read value] {
     constant(ref value)
 }
 
@@ -2684,7 +2684,7 @@ func main() -> Int {
 #[test]
 fn full_expression_temporaries_span_all_arguments_and_destroy_in_reverse() {
     let source = r#"
-func combine(first: ref[first] Int, second: ref[second] Int) -> Int {
+func combine(first: Int, second: Int) -> Int {
     first * 10 + second
 }
 func make(value: Int) -> Int { value }
@@ -2744,7 +2744,7 @@ import core.result
 import core.result.*
 import static core.result.*
 
-func combine(item: ref[item] Int, other: Int) -> Int { other }
+func combine(item: Int, other: Int) -> Int { other }
 func make() -> Int { 42 }
 func operation() -> Result<Int, String> { Result.Error("stop") }
 
@@ -2782,7 +2782,7 @@ func main() -> Int { 0 }
 #[test]
 fn expression_temporaries_are_destroyed_on_loop_transfer_paths() {
     let source = r#"
-func combine(item: ref[item] Int, other: Int) -> Int { other }
+func combine(item: Int, other: Int) -> Int { other }
 func make() -> Int { 42 }
 
 func transfer() -> Int {
@@ -2824,7 +2824,7 @@ func main() -> Int { transfer() }
 #[test]
 fn rejects_a_borrow_that_escapes_its_expression_temporary() {
     let source = r#"
-func keep(item: ref[item] Int) -> ref[item] Int { ref item }
+func keep(item: Int) -> ref[item] Int { ref item }
 func make() -> Int { 42 }
 
 func main() -> Int {

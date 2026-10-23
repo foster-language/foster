@@ -1,6 +1,26 @@
 use super::*;
 
 impl Checker<'_> {
+    pub(super) fn coerce_constraint(
+        &mut self,
+        expected: Ty,
+        actual: Ty,
+        function: FunctionId,
+    ) -> Result<(), FosterError> {
+        match (expected, actual) {
+            (Ty::Record(record, arguments), actual @ Ty::Reference(..)) => {
+                self.coerce_record_shape(function, record, &arguments, actual)
+            }
+            (Ty::Intersection(requirements), actual @ Ty::Reference(..)) => {
+                for requirement in requirements {
+                    self.coerce_constraint(requirement, actual.clone(), function)?;
+                }
+                Ok(())
+            }
+            (expected, actual) => self.coerce(expected, actual, function),
+        }
+    }
+
     pub(super) fn coerce_expression(
         &mut self,
         expected: Ty,
@@ -538,6 +558,9 @@ impl Checker<'_> {
         name: &str,
     ) -> Result<Vec<Ty>, FosterError> {
         let resolved = self.resolved(actual.clone());
+        if let Ty::Reference(_, value) = &resolved {
+            return self.structural_method_types(function, value, name);
+        }
         if matches!(resolved, Ty::Generic(_)) {
             let mut methods = Vec::new();
             for requirement in self.constraint_requirements(function, &resolved)? {
@@ -623,6 +646,7 @@ impl Checker<'_> {
     ) -> Result<Option<Ty>, FosterError> {
         let caller_module = self.hir.functions[function].module;
         match self.resolved(actual.clone()) {
+            Ty::Reference(_, value) => self.structural_field_type(function, &value, name),
             generic @ Ty::Generic(_) => {
                 for requirement in self.constraint_requirements(function, &generic)? {
                     if let Some(field) = self.structural_field_type(function, &requirement, name)? {

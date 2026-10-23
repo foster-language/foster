@@ -169,7 +169,7 @@ mod tests {
     #[test]
     fn folds_scalars_inside_mutating_functions_without_reusing_places() {
         let compilation = crate::compile(
-            "func update(value: ref[value] Int) -> Int [mut value] {
+            "func update(value: Int) -> Int [mut value] {
                  let before = 20 + 22
                  value = value + 1
                  let after = 3 * 4
@@ -251,7 +251,7 @@ mod tests {
     fn barrier_functions_keep_constants_without_disabling_pure_optimization() {
         let compilation = crate::compile(
             "func answer() -> Int { 20 + 22 }
-             func replace(value: ref[value] Int) -> Int [mut value] {
+             func replace(value: Int) -> Int [mut value] {
                  value = 7
                  value
              }

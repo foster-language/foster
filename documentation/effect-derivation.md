@@ -5,7 +5,7 @@ the compiler derives their contract from typed HIR and stores it on the function
 are useful for callable contracts and for APIs that intentionally publish an upper bound.
 
 ```foster
-func set(value: ref[value] Int, next: Int) -> Int [mut value] {
+func set(value: Int, next: Int) -> Int [mut value] {
     value = next
     value
 }
@@ -58,6 +58,9 @@ The parser represents a target as `GroupPath { root, children }`. Indexed list s
 synthetic `items` child, so an in-place `push` derives `reshape values.items`.
 
 ## Inferred and explicit contracts
+
+Reading a parameter listed in the signature needs no extra `read` entry. An
+explicit effect clause must still cover mutations to that parameter.
 
 For a function without an explicit clause:
 
@@ -142,8 +145,8 @@ scattered name checks.
 Direct functions, instance methods, closures, erased callable values, and partial applications all
 retain the same effect and suspension information.
 
-At a call site, every callee parameter storage group is independently substituted from the corresponding
-`ref[formal]` parameter and actual argument. Child path components survive substitution. A method's
+At a call site, each incoming parameter group is independently substituted from the corresponding
+argument. Child path components survive substitution. A method's
 `self` effect is instantiated according to its receiver:
 
 | Receiver | Meaning of the callee's `self` effect |

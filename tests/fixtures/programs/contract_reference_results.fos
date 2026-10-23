@@ -13,23 +13,23 @@ type Item = & Value & {
 type Other = & Value & {
     pub marker: Int, pub tail: String
 }
-pub func borrowed(item: ref[item] Value) -> ref[item] Value {
+pub func borrowed(item: Value) -> ref[item] Value {
     ref item
 }
-pub func forwarded(item: ref[item] Value) -> ref[item] Value {
+pub func forwarded(item: Value) -> ref[item] Value {
     borrowed(item)
 }
 pub func ordinary(item: Value) -> ref[item] Value {
     ref item
 }
-pub func existing(item: ref[item] Value) -> ref[item] Value {
+pub func existing(item: Value) -> ref[item] Value {
     let saved = ref item
     ref saved
 }
-func increase(item: ref[item] Value) -> () {
+func increase(item: Value) -> () {
     item.value = item.value + 1
 }
-func increase_generic<T & Value>(item: ref[item] T) -> () {
+func increase_generic<T & Value>(item: T) -> () {
     item.value = item.value + 1
 }
 pub type NumberBorrow = {
@@ -46,17 +46,17 @@ impl Number {
 func number(value: NumberBorrow) -> ref[value] Int {
     value.borrow()
 }
-func read_number(value: ref[value] Int) -> Int {
+func read_number(value: Int) -> Int {
     value
 }
-func early(item: ref[item] Value) -> ref[item] Value {
+func early(item: Value) -> ref[item] Value {
     return forwarded(item) if item.value < 30
     ref item
 }
 type Holder = {
     item: Item
 }
-func child(holder: ref[holder] Holder) -> ref[holder] Value {
+func child(holder: Holder) -> ref[holder] Value {
     ref holder.item
 }
 func main() -> Int {

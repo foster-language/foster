@@ -4,7 +4,7 @@ fn buffer_views_cannot_escape_the_owner() {
 import core.buffer
 import core.buffer.Buffer
 import core.buffer.BufferView
-func escaped(owner: ref[owner] Buffer<Int>) -> BufferView<ref[owner] Buffer<Int>> {
+func escaped(owner: Buffer<Int>) -> BufferView<ref[owner] Buffer<Int>> {
     let local = buffer::integers(4, 0)
     local.view(0, 4)
 }

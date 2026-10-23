@@ -60,8 +60,8 @@ fn check_bodies(
     recover: Option<&HashSet<hir::ModuleId>>,
     cache: Option<incremental::SharedBodyCache>,
 ) -> Result<(TypeInformation, Vec<crate::diagnostic::Diagnostic>), Vec<FosterError>> {
-    reference_parameters::lower(hir).map_err(|error| vec![error])?;
     loop {
+        reference_parameters::lower(hir).map_err(|error| vec![error])?;
         crate::compiler::cancellation::check().map_err(|e| vec![e])?;
         crate::compiler::profile::count("types.iterations");
         let mut checker = Checker::new(hir);
@@ -723,21 +723,30 @@ impl<'a> Checker<'a> {
                 )));
             }
             let modes = function_parameter_modes(self.hir, function_id);
+            let required_storage = self.required_parameter_storage(function_id, &parameters)?;
             let parameters = parameters
                 .into_iter()
                 .zip(&function.parameters)
                 .zip(&modes)
-                .map(|((ty, parameter), mode)| {
+                .enumerate()
+                .map(|(index, ((ty, parameter), mode))| {
                     let name = &self.hir.locals[parameter.local].name;
                     if *mode == crate::ast::ParameterMode::Borrow
                         && (crate::hir::queries::type_exposes_group(
                             function.return_type.as_ref(),
                             name,
-                        ) || (function.receiver == Some(parameter.local)
-                            && crate::hir::queries::receiver_requires_storage(
-                                self.hir,
-                                function_id,
-                            )))
+                        ) || required_storage[index]
+                            || (function.receiver != Some(parameter.local)
+                                && crate::hir::queries::parameter_requires_storage(
+                                    name,
+                                    None,
+                                    &function.effects,
+                                ))
+                            || (function.receiver == Some(parameter.local)
+                                && crate::hir::queries::receiver_requires_storage(
+                                    self.hir,
+                                    function_id,
+                                )))
                         && !matches!(ty, Ty::Reference(..))
                     {
                         Ty::Reference(name.clone(), Box::new(ty))
