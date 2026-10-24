@@ -321,7 +321,11 @@ the other optimization mode to be prepared without reconstructing bytecode or re
 Cranelift performs machine-specific optimization after native representation and ABI lowering.
 Native preparation infers SSA representations and contract views first, then finalizes field
 storage and physical layouts. ABI lowering and verification use that frozen registry;
-native verification rejects contract-view conversions missing from the storage plan.
+native verification rejects contract-view conversions missing from the storage plan. Storage
+entries identify record slots by index and variant payloads by alternative identity
+and payload index. Erasure affects only that alternative. Missing layouts, fields,
+alternatives and payload positions, or selectors for the wrong layout kind, are
+planning errors. Display names such as `payload0` do not identify storage.
 Reachable dispatch implementations are indexed by slot, receiver layout, and arity.
 View discovery visits portable SSA once and propagates new relationships through a
 dependency worklist; calls in each round observe the same completed relation.

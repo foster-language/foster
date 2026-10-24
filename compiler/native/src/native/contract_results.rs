@@ -467,20 +467,19 @@ pub(super) fn verify(
     Ok(())
 }
 
-pub(super) fn erased_fields(environment: NativeIrEnvironment<'_>) -> BTreeSet<(LayoutId, String)> {
+pub(super) fn erased_fields(
+    environment: NativeIrEnvironment<'_>,
+) -> BTreeSet<(LayoutId, crate::codegen::layout::physical::StorageField)> {
+    use crate::codegen::layout::physical::StorageField;
     let mut fields = BTreeSet::new();
     let opaque = environment.layouts.opaque();
+    let needs_erasure =
+        |actual: &crate::codegen::layout::physical::FieldLayout,
+         expected: &crate::codegen::layout::physical::FieldLayout| {
+            expected.value.pointee == Some(opaque) && actual.value.pointee != Some(opaque)
+        };
     for (&expected, actuals) in environment.contract_views {
         for &actual in actuals {
-            let mut compare = |actual_fields: &[crate::codegen::layout::physical::FieldLayout], expected_fields: &[crate::codegen::layout::physical::FieldLayout]| {
-                for expected in expected_fields {
-                    if expected.value.pointee == Some(opaque)
-                        && let Some(field) = actual_fields.iter().find(|field| field.name == expected.name)
-                        && field.value.pointee != Some(opaque) {
-                        fields.insert((actual, field.name.clone()));
-                    }
-                }
-            };
             match (
                 &environment.physical_layouts.get(actual).kind,
                 &environment.physical_layouts.get(expected).kind,
@@ -488,7 +487,15 @@ pub(super) fn erased_fields(environment: NativeIrEnvironment<'_>) -> BTreeSet<(L
                 (
                     PhysicalKind::Record { fields: a, .. },
                     PhysicalKind::Record { fields: b, .. },
-                ) => compare(a, b),
+                ) => {
+                    for expected in b {
+                        if let Some(field) = a.iter().find(|field| field.name == expected.name)
+                            && needs_erasure(field, expected)
+                        {
+                            fields.insert((actual, StorageField::Record { index: field.index }));
+                        }
+                    }
+                }
                 (
                     PhysicalKind::Variant {
                         alternatives: a, ..
@@ -497,8 +504,28 @@ pub(super) fn erased_fields(environment: NativeIrEnvironment<'_>) -> BTreeSet<(L
                         alternatives: b, ..
                     },
                 ) => {
-                    for (a, b) in a.iter().zip(b) {
-                        compare(&a.fields, &b.fields);
+                    for expected in b {
+                        if let Some(alternative) = a
+                            .iter()
+                            .find(|alternative| alternative.variant == expected.variant)
+                        {
+                            for expected in &expected.fields {
+                                if let Some(field) = alternative
+                                    .fields
+                                    .iter()
+                                    .find(|field| field.index == expected.index)
+                                    && needs_erasure(field, expected)
+                                {
+                                    fields.insert((
+                                        actual,
+                                        StorageField::VariantPayload {
+                                            alternative: alternative.variant,
+                                            index: field.index,
+                                        },
+                                    ));
+                                }
+                            }
+                        }
                     }
                 }
                 _ => {}

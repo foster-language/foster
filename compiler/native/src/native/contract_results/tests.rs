@@ -1,5 +1,75 @@
 use super::*;
 
+#[test]
+fn contract_storage_erases_only_the_selected_variant_payload() {
+    use crate::codegen::layout::physical::StorageField;
+    let compilation = crate::compile(
+        r#"
+enum Choice<T> = Item(T) | Count(Int)
+type Contract = {
+    func answer() -> Int
+    func pick() -> Choice<Self>
+}
+type Item = & Contract & { number: Int }
+impl Item {
+    func answer() -> Int { self.number }
+    func pick() -> Choice<Item> { Choice.Item(Item { number: self.number }) }
+}
+func choose(item: Contract) -> Choice<Contract> { item.pick() }
+func main() -> Int {
+    branch choose(Item { number: 42 }) {
+        Choice.Item(value) -> value.answer()
+        Choice.Count(value) -> value
+    }
+}
+"#,
+    )
+    .unwrap();
+    assert_eq!(
+        crate::vm::run(&compilation).unwrap(),
+        crate::vm::Value::Integer(42)
+    );
+    for optimize in [false, true] {
+        let prepared = prepare_with_options(&compilation, CompileOptions { optimize }).unwrap();
+        let provisional = PhysicalRegistry::build(&prepared.layouts, TargetLayout::host()).unwrap();
+        let erased = erased_fields(NativeIrEnvironment {
+            physical_layouts: &provisional,
+            ..prepared.environment()
+        });
+        let mut payloads = 0;
+        for (layout, field) in erased {
+            if let StorageField::VariantPayload { alternative, index } = field {
+                payloads += 1;
+                assert_eq!(index, 0);
+                let PhysicalKind::Variant { alternatives, .. } =
+                    &prepared.physical_layouts.get(layout).kind
+                else {
+                    panic!()
+                };
+                let selected = alternatives
+                    .iter()
+                    .find(|candidate| candidate.variant == alternative)
+                    .unwrap();
+                assert_eq!(selected.name, "Item");
+                assert_eq!(
+                    selected.fields[0].value.pointee,
+                    Some(prepared.layouts.opaque())
+                );
+                let other = alternatives
+                    .iter()
+                    .find(|candidate| candidate.name == "Count")
+                    .unwrap();
+                assert_eq!(other.fields[0].value.kind, ScalarKind::I64);
+                assert_eq!(other.fields[0].value.pointee, None);
+            }
+        }
+        assert!(payloads > 0, "fixture must require variant payload erasure");
+        prepared
+            .compile_object(CompileOptions { optimize })
+            .unwrap();
+    }
+}
+
 fn plans(prepared: &NativeProgram<'_>, optimize: bool) -> Vec<legalize::FunctionRepresentations> {
     let shared = prepared.compilation.shared_program(optimize).unwrap();
     let (_, facts) = reference_results::retained_reference_flow(&shared).unwrap();

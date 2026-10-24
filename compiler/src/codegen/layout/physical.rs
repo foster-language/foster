@@ -157,6 +157,7 @@ pub struct FieldLayout {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AlternativeLayout {
+    pub variant: crate::hir::VariantId,
     pub tag: u32,
     pub name: String,
     pub fields: Vec<FieldLayout>,
@@ -498,6 +499,19 @@ fn push_u32(bytes: &mut Vec<u8>, value: u32) {
     bytes.extend_from_slice(&value.to_le_bytes());
 }
 
+/// Logical identity of a field whose physical storage must be erased.
+/// Payload indices are scoped to one variant alternative, never the whole enum.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum StorageField {
+    Record {
+        index: u32,
+    },
+    VariantPayload {
+        alternative: crate::hir::VariantId,
+        index: u32,
+    },
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PhysicalRegistry {
     target: TargetLayout,
@@ -512,30 +526,44 @@ impl PhysicalRegistry {
     pub fn build_with_erased_fields(
         logical: &Registry,
         target: TargetLayout,
-        erased: &std::collections::BTreeSet<(LayoutId, String)>,
+        erased: &std::collections::BTreeSet<(LayoutId, StorageField)>,
     ) -> Result<Self, LayoutError> {
         let mut storage = logical.clone();
-        for (layout, name) in erased {
-            match &mut storage.layouts[layout.0 as usize].kind {
-                LayoutKind::Record { fields, .. } => {
-                    if let Some(field) = fields.iter_mut().find(|field| field.name == *name) {
-                        field.ty = ExecutableType::Unknown;
-                        field.ownership = Ownership::Owned;
-                    }
+        for &(layout, field) in erased {
+            let invalid = || {
+                LayoutError::new(format!(
+                    "invalid erased storage entry for l{}: {field:?}",
+                    layout.0
+                ))
+            };
+            let kind = &mut storage
+                .layouts
+                .get_mut(layout.0 as usize)
+                .ok_or_else(invalid)?
+                .kind;
+            match (kind, field) {
+                (LayoutKind::Record { fields, .. }, StorageField::Record { index }) => {
+                    let field = fields
+                        .iter_mut()
+                        .find(|field| field.index == index)
+                        .ok_or_else(invalid)?;
+                    field.ty = ExecutableType::Unknown;
+                    field.ownership = Ownership::Owned;
                 }
-                LayoutKind::Variant { alternatives, .. } => {
-                    if let Some(index) = name
-                        .strip_prefix("payload")
-                        .and_then(|index| index.parse::<usize>().ok())
-                    {
-                        for alternative in alternatives {
-                            if let Some(field) = alternative.payload.get_mut(index) {
-                                *field = ExecutableType::Unknown;
-                            }
-                        }
-                    }
+                (
+                    LayoutKind::Variant { alternatives, .. },
+                    StorageField::VariantPayload { alternative, index },
+                ) => {
+                    let alternative = alternatives
+                        .iter_mut()
+                        .find(|candidate| candidate.variant == alternative)
+                        .ok_or_else(invalid)?;
+                    *alternative
+                        .payload
+                        .get_mut(index as usize)
+                        .ok_or_else(invalid)? = ExecutableType::Unknown;
                 }
-                _ => {}
+                _ => return Err(invalid()),
             }
         }
         Self::build(&storage, target)
@@ -747,6 +775,7 @@ fn calculate_layout(
                 payload_size = payload_size.max(end);
                 payload_align = payload_align.max(align);
                 lowered.push(AlternativeLayout {
+                    variant: alternative.variant,
                     tag: alternative.tag,
                     name: alternative.name.clone(),
                     fields,
@@ -1368,6 +1397,172 @@ mod tests {
         }
         registry.opaque = Some(LayoutId(0));
         registry
+    }
+
+    #[cfg(not(foster_bootstrap))]
+    mod erased_storage {
+        use super::*;
+        use std::collections::BTreeSet;
+
+        fn schema() -> Registry {
+            registry(vec![
+                LayoutKind::Opaque,
+                LayoutKind::Record {
+                    record: id::<Record>(0),
+                    name: "Record".into(),
+                    arguments: vec![],
+                    fields: vec![
+                        Slot {
+                            index: 0,
+                            name: "payload0".into(),
+                            ty: ExecutableType::Integer,
+                            ownership: Ownership::Owned,
+                        },
+                        Slot {
+                            index: 1,
+                            name: "other".into(),
+                            ty: ExecutableType::Bool,
+                            ownership: Ownership::Owned,
+                        },
+                    ],
+                },
+                LayoutKind::Variant {
+                    variant_type: id::<VariantType>(0),
+                    name: "Choice".into(),
+                    arguments: vec![],
+                    alternatives: vec![
+                        Alternative {
+                            variant: id::<Variant>(5),
+                            tag: 0,
+                            name: "First".into(),
+                            payload: vec![ExecutableType::Integer],
+                        },
+                        Alternative {
+                            variant: id::<Variant>(2),
+                            tag: 1,
+                            name: "Second".into(),
+                            payload: vec![ExecutableType::Bool],
+                        },
+                        Alternative {
+                            variant: id::<Variant>(8),
+                            tag: 2,
+                            name: "Empty".into(),
+                            payload: vec![],
+                        },
+                    ],
+                },
+            ])
+        }
+
+        #[test]
+        fn erasure_is_scoped_to_the_record_slot_and_variant_identity() {
+            let logical = schema();
+            let before = logical.clone();
+            let plan = BTreeSet::from([
+                (LayoutId(1), StorageField::Record { index: 0 }),
+                (
+                    LayoutId(2),
+                    StorageField::VariantPayload {
+                        alternative: id(5),
+                        index: 0,
+                    },
+                ),
+            ]);
+            for target in [
+                TargetLayout::new(4, 4).unwrap(),
+                TargetLayout::new(8, 8).unwrap(),
+            ] {
+                let physical =
+                    PhysicalRegistry::build_with_erased_fields(&logical, target, &plan).unwrap();
+                let PhysicalKind::Record { fields, .. } = &physical.get(LayoutId(1)).kind else {
+                    panic!()
+                };
+                assert_eq!(fields[0].value.pointee, Some(LayoutId(0)));
+                assert_eq!(fields[1].value.kind, ScalarKind::I8);
+                let PhysicalKind::Variant { alternatives, .. } = &physical.get(LayoutId(2)).kind
+                else {
+                    panic!()
+                };
+                assert_eq!(alternatives[0].variant, id(5));
+                assert_eq!(alternatives[0].fields[0].value.pointee, Some(LayoutId(0)));
+                assert_eq!(alternatives[1].fields[0].value.kind, ScalarKind::I8);
+                assert_eq!(alternatives[1].fields[0].value.pointee, None);
+                assert!(alternatives[2].fields.is_empty());
+                assert_eq!(
+                    logical, before,
+                    "planning must not modify the logical schema"
+                );
+                assert_eq!(
+                    physical,
+                    PhysicalRegistry::build_with_erased_fields(&logical, target, &plan).unwrap()
+                );
+            }
+        }
+
+        #[test]
+        fn invalid_entries_are_errors_and_leave_the_schema_unchanged() {
+            let logical = schema();
+            let before = logical.clone();
+            for (layout, field) in [
+                (99, StorageField::Record { index: 0 }),
+                (0, StorageField::Record { index: 0 }),
+                (1, StorageField::Record { index: 9 }),
+                (2, StorageField::Record { index: 0 }),
+                (
+                    1,
+                    StorageField::VariantPayload {
+                        alternative: id(5),
+                        index: 0,
+                    },
+                ),
+                (
+                    2,
+                    StorageField::VariantPayload {
+                        alternative: id(0),
+                        index: 0,
+                    },
+                ),
+                (
+                    2,
+                    StorageField::VariantPayload {
+                        alternative: id(5),
+                        index: 1,
+                    },
+                ),
+                (
+                    2,
+                    StorageField::VariantPayload {
+                        alternative: id(8),
+                        index: 0,
+                    },
+                ),
+            ] {
+                let plan = BTreeSet::from([
+                    (LayoutId(1), StorageField::Record { index: 0 }),
+                    (LayoutId(layout), field),
+                ]);
+                let error = PhysicalRegistry::build_with_erased_fields(
+                    &logical,
+                    TargetLayout::host(),
+                    &plan,
+                )
+                .unwrap_err();
+                assert!(
+                    error.to_string().contains("invalid erased storage entry"),
+                    "{error}"
+                );
+                assert_eq!(logical, before);
+            }
+            assert_eq!(
+                PhysicalRegistry::build_with_erased_fields(
+                    &logical,
+                    TargetLayout::host(),
+                    &BTreeSet::new()
+                )
+                .unwrap(),
+                PhysicalRegistry::build(&logical, TargetLayout::host()).unwrap()
+            );
+        }
     }
 
     #[test]
