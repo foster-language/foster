@@ -74,6 +74,7 @@ pub struct NativeProgram<'a> {
     pub(super) runtime_literal_indices: HashMap<String, u64>,
     pub(super) functions: Vec<NativeFunction>,
     pub(super) contract_views: HashMap<LayoutId, BTreeSet<LayoutId>>,
+    candidates: CandidateIndex,
 }
 
 /// Prepare once, then render or emit any number of objects without repeating specialization.
@@ -159,6 +160,13 @@ fn prepare_shared(
     for ty in field_types {
         layouts.instantiate_type(&ExecutableType::Reference(Box::new(ty)))?;
     }
+    let candidates = CandidateIndex::build(
+        compilation,
+        &program,
+        &layouts,
+        &instance_ids,
+        &function_types,
+    );
     let physical_layouts = crate::compiler::profile::measure("native.layouts", || {
         PhysicalRegistry::build(&layouts, TargetLayout::host())
     })
@@ -180,6 +188,7 @@ fn prepare_shared(
         instances: &instance_ids,
         builtin_result_types: &builtin_result_types,
         contract_views: &empty_views,
+        candidates: &candidates,
     };
     let function_types =
         reference_results::resolve_reference_results(&instances, environment, facts)?;
@@ -233,6 +242,7 @@ fn prepare_shared(
         runtime_literal_indices,
         functions: Vec::new(),
         contract_views,
+        candidates,
     };
     for (instance, representations) in prepared.instances.iter().zip(representations) {
         let source = &prepared.program.functions[&instance.key.function];
@@ -424,6 +434,7 @@ impl NativeProgram<'_> {
             instances: &self.instance_ids,
             builtin_result_types: &self.builtin_result_types,
             contract_views: &self.contract_views,
+            candidates: &self.candidates,
         }
     }
 }

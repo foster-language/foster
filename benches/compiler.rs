@@ -1,10 +1,12 @@
 use std::hint::black_box;
 use std::time::Duration;
 
-use criterion::{Criterion, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use foster::vm::CompileOptions;
 
 const SOURCE: &str = include_str!("../benchmarks/fibonacci.fos");
+#[path = "../benchmarks/support/native_dispatch.rs"]
+mod native_sources;
 
 fn compiler_benchmarks(criterion: &mut Criterion) {
     let mut group = criterion.benchmark_group("compiler");
@@ -71,5 +73,41 @@ fn compiler_benchmarks(criterion: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, compiler_benchmarks);
+fn native_dispatch_benchmarks(criterion: &mut Criterion) {
+    for (name, sizes, source) in [
+        (
+            "native_candidates",
+            &[4, 16, 32][..],
+            native_sources::candidates as fn(usize) -> String,
+        ),
+        (
+            "native_views",
+            &[4, 16, 32][..],
+            native_sources::views as fn(usize) -> String,
+        ),
+    ] {
+        let mut group = criterion.benchmark_group(name);
+        group
+            .sample_size(10)
+            .warm_up_time(Duration::from_millis(200))
+            .measurement_time(Duration::from_secs(1));
+        for &size in sizes {
+            let compilation = foster::compile(&source(size)).unwrap();
+            let options = foster::native::CompileOptions { optimize: false };
+            // Warm shared SSA outside the timed region; emission reuses one plan.
+            let prepared = foster::native::prepare_with_options(&compilation, options).unwrap();
+            group.bench_with_input(BenchmarkId::new("prepare", size), &size, |bencher, _| {
+                bencher.iter(|| {
+                    foster::native::prepare_with_options(black_box(&compilation), options).unwrap()
+                });
+            });
+            group.bench_with_input(BenchmarkId::new("emit", size), &size, |bencher, _| {
+                bencher.iter(|| black_box(&prepared).compile_object(options).unwrap());
+            });
+        }
+        group.finish();
+    }
+}
+
+criterion_group!(benches, compiler_benchmarks, native_dispatch_benchmarks);
 criterion_main!(benches);

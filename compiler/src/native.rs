@@ -97,8 +97,9 @@ use representation::{
 };
 mod specialization;
 use specialization::{
-    VerifiedRemoteCall, collect_function_types, contract_argument_matches, contract_candidates,
-    executable_type_for_native, reachable_instances, resolve_specialization, verified_remote_calls,
+    CandidateIndex, VerifiedRemoteCall, collect_function_types, contract_argument_matches,
+    contract_candidates, executable_type_for_native, reachable_instances, resolve_specialization,
+    verified_remote_calls,
 };
 mod thunks;
 use thunks::{
@@ -170,6 +171,7 @@ struct NativeIrEnvironment<'a> {
     builtin_result_types:
         &'a HashMap<crate::intrinsics::Builtin, crate::codegen::types::ExecutableType>,
     contract_views: &'a HashMap<LayoutId, BTreeSet<LayoutId>>,
+    candidates: &'a CandidateIndex,
 }
 
 /// Shared immutable state for lowering one module's functions to Cranelift.
@@ -209,7 +211,7 @@ struct NativeInstance {
     ir_function: FunctionId,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct ContractCandidate {
     layout: LayoutId,
     implementation: FunctionId,
@@ -384,3 +386,7 @@ func main() -> Int {
         assert_eq!(NativeType::Float.representation(), ir::Representation::F64);
     }
 }
+
+#[cfg(test)]
+#[path = "../../benchmarks/support/native_dispatch.rs"]
+mod benchmark_sources;

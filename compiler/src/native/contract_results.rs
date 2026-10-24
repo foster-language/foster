@@ -107,16 +107,16 @@ pub(super) fn matches(
     visit(actual, expected, env, &mut HashSet::new())
 }
 
-pub(super) fn collect_views(
-    functions: &[legalize::FunctionRepresentations],
-    environment: NativeIrEnvironment<'_>,
-) -> Result<HashMap<LayoutId, BTreeSet<LayoutId>>, FosterError> {
-    fn record(
-        actual: NativeType,
-        expected: NativeType,
-        env: NativeIrEnvironment<'_>,
-        views: &mut HashMap<LayoutId, BTreeSet<LayoutId>>,
-    ) {
+type Views = HashMap<LayoutId, BTreeSet<LayoutId>>;
+
+#[derive(Default)]
+struct PendingViews {
+    additions: Views,
+    pairs: Vec<(LayoutId, LayoutId)>,
+}
+
+impl PendingViews {
+    fn record(&mut self, actual: NativeType, expected: NativeType, env: NativeIrEnvironment<'_>) {
         if actual == expected {
             return;
         }
@@ -130,11 +130,22 @@ pub(super) fn collect_views(
                 native_verification_type(&env.program.metadata, env.layouts, a, None),
                 native_verification_type(&env.program.metadata, env.layouts, b, None),
             ) {
-                record(a, b, env, views);
+                self.record(a, b, env);
             }
             return;
         }
         // Opaque boxes have their own ABI and own a handle to the original value.
+        if env
+            .contract_views
+            .get(&b)
+            .is_some_and(|values| values.contains(&a))
+            || self
+                .additions
+                .get(&b)
+                .is_some_and(|values| values.contains(&a))
+        {
+            return;
+        }
         if !matches(actual, expected, env)
             || matches!(
                 env.layouts.get(a).kind,
@@ -147,19 +158,19 @@ pub(super) fn collect_views(
         {
             return;
         }
-        if !views.entry(b).or_default().insert(a) {
+        if !self.additions.entry(b).or_default().insert(a) {
             return;
         }
+        self.pairs.push((b, a));
         let mut fields =
             |a: &[crate::codegen::layout::physical::FieldLayout],
              b: &[crate::codegen::layout::physical::FieldLayout]| {
                 for b in b {
                     if let Some(a) = a.iter().find(|a| a.name == b.name) {
-                        record(
+                        self.record(
                             dispatch::field_native_type(a.value),
                             dispatch::field_native_type(b.value),
                             env,
-                            views,
                         );
                     }
                 }
@@ -186,116 +197,211 @@ pub(super) fn collect_views(
             _ => {}
         }
     }
-    let mut views = HashMap::new();
-    loop {
-        let before = views.clone();
-        let mut env = environment;
-        env.contract_views = &before;
-        for function in functions {
-            let ty = |value: ir::Value| function.inferred.types[value.index()];
-            let mut conversion = |actual, expected| -> Result<(), FosterError> {
-                if matches!(
-                    legalize::ReturnConversion::between(actual, expected, env)?,
-                    Some(legalize::ReturnConversion::ContractView)
-                ) {
-                    record(actual, expected, env, &mut views);
-                }
-                Ok(())
-            };
-            // Lowering inserts conversions on returns and control-flow edges.
-            // Discover their storage requirements directly from inferred SSA.
-            conversion_arguments(
-                &function.body.entry_arguments,
-                &function.body.blocks[function.body.entry.0 as usize].parameters,
-                function,
-                &mut conversion,
-            )?;
-            for block in &function.body.blocks {
-                match &block.terminator {
-                    ir::Terminator::Return(value) => conversion(ty(*value), function.result)?,
-                    ir::Terminator::Jump { target, arguments } => conversion_arguments(
-                        arguments,
-                        &function.body.blocks[target.0 as usize].parameters,
-                        function,
-                        &mut conversion,
-                    )?,
-                    ir::Terminator::Branch {
-                        then_target,
-                        then_arguments,
-                        else_target,
-                        else_arguments,
-                        ..
-                    } => {
-                        for (target, arguments) in
-                            [(then_target, then_arguments), (else_target, else_arguments)]
-                        {
-                            conversion_arguments(
-                                arguments,
-                                &function.body.blocks[target.0 as usize].parameters,
-                                function,
-                                &mut conversion,
-                            )?;
-                        }
-                    }
-                    ir::Terminator::Unreachable => {}
-                }
+}
+
+#[derive(Hash, PartialEq, Eq)]
+struct ViewCall {
+    slot: crate::types::DispatchSlot,
+    receiver: NativeType,
+    arguments: Vec<NativeType>,
+    result: NativeType,
+}
+
+#[derive(Default)]
+struct ViewWork {
+    calls: usize,
+    pairs: usize,
+    rounds: usize,
+}
+
+pub(super) fn collect_views(
+    functions: &[legalize::FunctionRepresentations],
+    environment: NativeIrEnvironment<'_>,
+) -> Result<Views, FosterError> {
+    Ok(collect_views_with_work(functions, environment)?.0)
+}
+
+fn collect_views_with_work(
+    functions: &[legalize::FunctionRepresentations],
+    environment: NativeIrEnvironment<'_>,
+) -> Result<(Views, ViewWork), FosterError> {
+    let views = Views::new();
+    let mut pending = PendingViews::default();
+    let mut calls = Vec::new();
+    let mut unique_calls = HashSet::new();
+    let initial = NativeIrEnvironment {
+        contract_views: &views,
+        ..environment
+    };
+    // Read portable SSA once. Conversion requirements do not depend on discovered
+    // views; only calls with a statically selected receiver need subscriptions.
+    for function in functions {
+        let ty = |value: ir::Value| function.inferred.types[value.index()];
+        let mut conversion = |actual, expected| -> Result<(), FosterError> {
+            if matches!(
+                legalize::ReturnConversion::between(actual, expected, initial)?,
+                Some(legalize::ReturnConversion::ContractView)
+            ) {
+                pending.record(actual, expected, initial);
             }
-            for entry in function
-                .body
-                .blocks
-                .iter()
-                .flat_map(|block| &block.instructions)
-            {
-                if let ir::Instruction::Portable(Instruction::CallContractMethod {
-                    destination,
-                    receiver,
-                    slot,
+            Ok(())
+        };
+        conversion_arguments(
+            &function.body.entry_arguments,
+            &function.body.blocks[function.body.entry.0 as usize].parameters,
+            function,
+            &mut conversion,
+        )?;
+        for block in &function.body.blocks {
+            match &block.terminator {
+                ir::Terminator::Return(value) => conversion(ty(*value), function.result)?,
+                ir::Terminator::Jump { target, arguments } => conversion_arguments(
                     arguments,
+                    &function.body.blocks[target.0 as usize].parameters,
+                    function,
+                    &mut conversion,
+                )?,
+                ir::Terminator::Branch {
+                    then_target,
+                    then_arguments,
+                    else_target,
+                    else_arguments,
                     ..
-                }) = &entry.instruction
-                {
-                    let arguments = arguments
-                        .iter()
-                        .map(|argument| ty(*argument))
-                        .collect::<Vec<_>>();
-                    let receiver = dereference_native_type(ty(*receiver), env)?;
-                    let candidates = contract_candidates(*slot, receiver, &arguments, env)?;
-                    // Dispatch observes the argument ABI chosen by legalization,
-                    // including boxing and callable wrappers, rather than the
-                    // original source-value representations.
-                    let arguments = candidates
-                        .first()
-                        .map_or(arguments.as_slice(), |candidate| {
-                            &env.function_types[&candidate.function].parameters[1..]
-                        });
-                    for candidate in contract_candidates(*slot, receiver, arguments, env)? {
-                        record(
-                            env.function_types[&candidate.function].result,
-                            ty(*destination),
-                            env,
-                            &mut views,
-                        );
+                } => {
+                    for (target, arguments) in
+                        [(then_target, then_arguments), (else_target, else_arguments)]
+                    {
+                        conversion_arguments(
+                            arguments,
+                            &function.body.blocks[target.0 as usize].parameters,
+                            function,
+                            &mut conversion,
+                        )?;
                     }
+                }
+                ir::Terminator::Unreachable => {}
+            }
+        }
+        for entry in function
+            .body
+            .blocks
+            .iter()
+            .flat_map(|block| &block.instructions)
+        {
+            if let ir::Instruction::Portable(Instruction::CallContractMethod {
+                destination,
+                receiver,
+                slot,
+                arguments,
+                ..
+            }) = &entry.instruction
+            {
+                let call = ViewCall {
+                    slot: *slot,
+                    receiver: dereference_native_type(ty(*receiver), initial)?,
+                    arguments: arguments.iter().map(|value| ty(*value)).collect(),
+                    result: ty(*destination),
+                };
+                if unique_calls.insert((
+                    call.slot,
+                    call.receiver,
+                    call.arguments.clone(),
+                    call.result,
+                )) {
+                    calls.push(call);
                 }
             }
         }
-        for (&expected, actuals) in &before {
-            for &actual in actuals {
-                if let Some(ancestors) = before.get(&actual) {
-                    for &ancestor in ancestors {
-                        record(
-                            NativeType::Object(ancestor),
-                            NativeType::Object(expected),
-                            env,
-                            &mut views,
-                        );
-                    }
+    }
+    settle_views(pending, &calls, environment)
+}
+
+fn settle_views(
+    mut pending: PendingViews,
+    calls: &[ViewCall],
+    environment: NativeIrEnvironment<'_>,
+) -> Result<(Views, ViewWork), FosterError> {
+    let mut views = Views::new();
+    let mut parents = Views::new();
+    let mut observers = HashMap::<LayoutId, Vec<usize>>::new();
+    for (index, call) in calls.iter().enumerate() {
+        if !specialization::dynamic_receiver(call.slot, call.receiver, environment)
+            && let NativeType::Object(layout) = call.receiver
+        {
+            observers.entry(layout).or_default().push(index);
+        }
+    }
+    let mut work = ViewWork::default();
+    let mut queue = (0..calls.len()).collect::<BTreeSet<_>>();
+    let mut delta = Vec::new();
+    loop {
+        work.rounds += 1;
+        // Keep round semantics: calls see the previous round's complete relation.
+        // New edges are buffered, so an ABI choice cannot depend on queue order.
+        let env = NativeIrEnvironment {
+            contract_views: &views,
+            ..environment
+        };
+        for &index in &queue {
+            work.calls += 1;
+            crate::compiler::profile::count("native.views.call");
+            let call = &calls[index];
+            let candidates = contract_candidates(call.slot, call.receiver, &call.arguments, env)?;
+            let converted = candidates
+                .first()
+                .map(|candidate| &env.function_types[&candidate.function].parameters[1..]);
+            let candidates = if let Some(arguments) = converted
+                && arguments != call.arguments.as_slice()
+            {
+                contract_candidates(call.slot, call.receiver, arguments, env)?
+            } else {
+                candidates
+            };
+            for candidate in candidates {
+                pending.record(
+                    env.function_types[&candidate.function].result,
+                    call.result,
+                    env,
+                );
+            }
+        }
+        // Each new edge participates in both directions of transitive closure.
+        // Old/old compositions were handled when their last edge was introduced.
+        for &(expected, actual) in &delta {
+            work.pairs += 1;
+            crate::compiler::profile::count("native.views.pair");
+            if let Some(ancestors) = views.get(&actual) {
+                for &ancestor in ancestors {
+                    pending.record(
+                        NativeType::Object(ancestor),
+                        NativeType::Object(expected),
+                        env,
+                    );
+                }
+            }
+            if let Some(contracts) = parents.get(&expected) {
+                for &contract in contracts {
+                    pending.record(
+                        NativeType::Object(actual),
+                        NativeType::Object(contract),
+                        env,
+                    );
                 }
             }
         }
-        if views == before {
-            return Ok(views);
+        if pending.pairs.is_empty() {
+            return Ok((views, work));
         }
+        queue.clear();
+        delta = pending.pairs;
+        for &(expected, actual) in &delta {
+            views.entry(expected).or_default().insert(actual);
+            parents.entry(actual).or_default().insert(expected);
+            if let Some(affected) = observers.get(&expected) {
+                queue.extend(affected);
+            }
+        }
+        pending = PendingViews::default();
     }
 }
 
@@ -465,3 +571,6 @@ pub(super) fn with_layout(
     builder.switch_to_block(join);
     Ok(builder.block_params(join).to_vec())
 }
+
+#[cfg(test)]
+mod tests;

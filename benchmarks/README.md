@@ -5,6 +5,7 @@
 | [Criterion entry points](../benches/README.md) | Sampled compiler and VM microbenchmarks |
 | `fibonacci.fos`, `fibonacci.lua`, `scalar_cse.fos` | Small comparison workloads |
 | `native_runtime/` | Native allocation, dispatch, storage, and polling workloads |
+| [Native dispatch generators](support/native_dispatch.rs) | Candidate and view scaling inputs shared by Criterion and compiler regressions |
 | `taker/` | Matching Foster/Java parser consumers; requires sibling Taker repositories |
 | `harnesses/` | Repeatable CLI, LSP, C bridge, formatter, and application measurements |
 | [Rust profiling tools](../tools/profiling/README.md) | Compiler-phase and VM/native comparison examples |

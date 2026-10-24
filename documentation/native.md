@@ -304,6 +304,9 @@ Cranelift performs machine-specific optimization after native representation and
 Native preparation infers SSA representations and contract views first, then finalizes field
 storage and physical layouts. ABI lowering and verification use that frozen registry;
 native verification rejects contract-view conversions missing from the storage plan.
+Reachable dispatch implementations are indexed by slot, receiver layout, and arity.
+View discovery visits portable SSA once and propagates new relationships through a
+dependency worklist; calls in each round observe the same completed relation.
 Each prepared function retains its specialized logical signature and parameter ownership modes,
 compact verified logical alternatives by original SSA value, and a per-value memory-management
 classification. This preserves distinctions such as String versus Symbol after both become pointers.

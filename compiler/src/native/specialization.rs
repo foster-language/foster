@@ -8,6 +8,8 @@ use super::{
 use crate::codegen::types::ExecutableType;
 
 use crate::codegen::flow::{FunctionFacts, Site, ValueFact};
+mod candidates;
+pub(super) use candidates::{CandidateIndex, contract_candidates, dynamic_receiver};
 pub(super) type FlowFacts = HashMap<FunctionId, std::sync::Arc<FunctionFacts>>;
 fn known(
     facts: &FunctionFacts,
@@ -491,109 +493,6 @@ pub(super) fn verified_remote_calls(
         }
     }
     Ok(calls)
-}
-
-pub(super) fn contract_candidates(
-    slot: crate::types::DispatchSlot,
-    receiver: NativeType,
-    argument_types: &[NativeType],
-    environment: NativeIrEnvironment<'_>,
-) -> Result<Vec<ContractCandidate>, FosterError> {
-    let receiver_layout = match receiver {
-        NativeType::Object(layout) => layout,
-        _ => return Ok(Vec::new()),
-    };
-    let receiver_nominal = match &environment.layouts.get(receiver_layout).kind {
-        LayoutKind::Record { record, .. } => Some(crate::types::NominalTypeId::Record(*record)),
-        LayoutKind::Variant { variant_type, .. } => {
-            Some(crate::types::NominalTypeId::Variant(*variant_type))
-        }
-        _ => None,
-    };
-    let dynamic = matches!(
-        environment.layouts.get(receiver_layout).kind,
-        LayoutKind::Opaque
-    ) || receiver_nominal.is_some_and(|nominal| {
-        !environment
-            .program
-            .metadata
-            .dispatch
-            .contains_key(&(nominal, slot))
-    });
-    let mut candidates = Vec::new();
-    for layout in environment
-        .layouts
-        .layouts()
-        .iter()
-        .filter(|layout| layout.materialized)
-    {
-        if !dynamic
-            && layout.id != receiver_layout
-            && !environment
-                .contract_views
-                .get(&receiver_layout)
-                .is_some_and(|layouts| layouts.contains(&layout.id))
-        {
-            continue;
-        }
-        let concrete = match &layout.kind {
-            LayoutKind::Record {
-                record, arguments, ..
-            } => crate::codegen::types::ExecutableType::Record {
-                record: *record,
-                arguments: arguments.clone(),
-            },
-            LayoutKind::Variant {
-                variant_type,
-                arguments,
-                ..
-            } => crate::codegen::types::ExecutableType::Variant {
-                variant: *variant_type,
-                arguments: arguments.clone(),
-            },
-            LayoutKind::Builtin { ty } => ty.clone(),
-            _ => continue,
-        };
-        let Some(nominal) = nominal_id(&concrete, environment.compilation) else {
-            continue;
-        };
-        let Some(implementation) = environment
-            .program
-            .metadata
-            .dispatch
-            .get(&(nominal, slot))
-            .copied()
-        else {
-            continue;
-        };
-        let mut matching = environment
-            .instances
-            .iter()
-            .filter_map(|(key, function)| {
-                if key.function != implementation {
-                    return None;
-                }
-                let signature = &environment.function_types[function];
-                let receiver_type = if matches!(layout.kind, LayoutKind::Record { record, .. } if Some(record) == environment.program.metadata.string_record) { NativeType::String } else { NativeType::Object(layout.id) };
-                (signature.parameters.first().is_some_and(|ty| {
-                    super::dereference_native_type(*ty, environment).is_ok_and(|ty| ty == receiver_type)
-                })
-                    && signature.parameters.len() == argument_types.len() + 1
-                    && signature.parameters[1..].iter().zip(argument_types).all(|(expected, actual)| contract_argument_matches(*actual, *expected, environment)))
-                .then_some(*function)
-            })
-            .collect::<Vec<_>>();
-        matching.sort_unstable_by_key(|function| function.into_raw().into_u32());
-        let Some(function) = matching.into_iter().next() else {
-            continue;
-        };
-        candidates.push(ContractCandidate {
-            layout: layout.id,
-            implementation,
-            function,
-        });
-    }
-    Ok(candidates)
 }
 
 // Candidate selection precedes ABI argument legalization. A checked concrete value may
