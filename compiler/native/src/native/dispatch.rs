@@ -15,7 +15,7 @@ fn opaque(ty: NativeType, layouts: &LayoutRegistry) -> bool {
 #[allow(clippy::too_many_arguments)]
 pub(super) fn lower(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     receiver: ClifValue,
     receiver_type: NativeType,
     result_type: NativeType,
@@ -263,7 +263,7 @@ pub(super) fn lower(
 
 fn getter(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     receiver: ClifValue,
     receiver_type: NativeType,
     result_type: NativeType,
@@ -300,7 +300,7 @@ fn getter(
 /// Transfer an owned method/accessor result into the representation promised by its contract.
 pub(super) fn adapt_result(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     value: ClifValue,
     actual: NativeType,
     expected: NativeType,

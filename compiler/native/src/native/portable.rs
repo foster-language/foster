@@ -1,8 +1,8 @@
 //! Lower portable scalar, collection, and intrinsic operations to Cranelift.
 use super::{
     BinaryOp, ClifValue, FosterError, FunctionBuilder, InstBuilder, IntCC, LayoutKind,
-    MemFlagsData, Module, NativeHostArguments, NativeLowering, NativeType, ObjectModule,
-    PhysicalKind, ScalarKind, SpecializationKey, ValueLayout, ValueSemantic, abi,
+    MemFlagsData, Module, NativeHostArguments, NativeLowering, NativeType, PhysicalKind,
+    PhysicalModule, ScalarKind, SpecializationKey, ValueLayout, ValueSemantic, abi,
     allocate_native_buffer, allocate_native_byte_buffer, allocate_native_bytes,
     append_native_buffer, clone_native_buffer, contract_candidates, copy, copy_native_bytes,
     cranelift_type, dispatch, fail_if, ir, load_physical_value, lower_binary, lower_native_await,
@@ -58,7 +58,7 @@ fn callback_owned_layout(
 
 fn callback_environment_safe(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     backend: &super::NativeBackend<'_>,
     layout: crate::codegen::layout::LayoutId,
     environment: ClifValue,
@@ -155,7 +155,7 @@ fn callback_environment_safe(
 
 pub(super) fn lower_portable_native(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     instruction: &ir::PortableInstruction,
     context: NativeLowering<'_, '_>,
 ) -> Result<Option<ClifValue>, FosterError> {
@@ -165,17 +165,12 @@ pub(super) fn lower_portable_native(
         homes,
         mutable_parameter_homes,
         backend,
+        ..
     } = context;
     let objects = backend.objects;
     let get = |value: &ir::Value| values[value];
     match instruction {
-        ir::PortableInstruction::Drop { value } => {
-            if let Some(layout) = objects.layouts.managed_layout(function.value_type(*value)) {
-                objects.release(builder, module, get(value), layout)?;
-                propagate_native_failure(builder, module)?;
-            }
-            Ok(None)
-        }
+        ir::PortableInstruction::Drop { .. } => Ok(None),
         ir::PortableInstruction::Move {
             destination,
             source,
@@ -192,12 +187,6 @@ pub(super) fn lower_portable_native(
             } else {
                 get(source)
             };
-            if let Some(layout) = objects
-                .layouts
-                .managed_layout(function.value_type(*destination))
-            {
-                objects.retain(builder, value, layout);
-            }
             Ok(Some(value))
         }
         ir::PortableInstruction::CopyOnWrite {

@@ -2,16 +2,16 @@
 use super::{
     ClifValue, FloatCC, FosterError, FunctionBuilder, HashMap, HashSet, InstBuilder, IntCC,
     LayoutKind, LayoutRegistry, MemFlagsData, Module, NativeBackend, NativeFunction,
-    NativeLowering, NativeType, ObjectModule, ObjectRuntime, Pattern, PatternSubject, PhysicalKind,
-    ScalarKind, StackSlotData, StackSlotKind, UnaryOp, ValueLayout, ValueSemantic, abi,
-    cranelift_type, fail_if, ir, load_physical_value, lower_binary, lower_native_terminator,
+    NativeLowering, NativeType, ObjectRuntime, Pattern, PatternSubject, PhysicalKind,
+    PhysicalModule, ScalarKind, StackSlotData, StackSlotKind, UnaryOp, ValueLayout, ValueSemantic,
+    abi, cranelift_type, fail_if, ir, load_physical_value, lower_binary, lower_native_terminator,
     lower_portable_native, lower_result_error_conversion, native_error, propagate_native_failure,
     runtime_call, store_physical_value, types, zero_i64,
 };
 
 pub(super) fn lower_native_ir(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     prepared: &NativeFunction,
     backend: &NativeBackend<'_>,
 ) -> Result<(), FosterError> {
@@ -137,31 +137,21 @@ pub(super) fn lower_native_ir(
                     values.insert(operand, loaded);
                 }
             }
-            builder.cleanup_homes = prepared
-                .failure_cleanup
-                .values
-                .get(&(index, instruction_index))
-                .into_iter()
-                .flatten()
-                .filter_map(|value| {
-                    let home = function.values.hint(value.index())?;
-                    referenced_homes
-                        .contains(&home)
-                        .then(|| (values[value], homes[&home]))
-                })
-                .collect();
-            builder.cleanup = prepared
-                .failure_cleanup
-                .values
-                .get(&(index, instruction_index))
-                .into_iter()
-                .flatten()
-                .filter_map(|value| {
-                    backend
-                        .objects
-                        .layouts
-                        .managed_layout(function.value_type(*value))
-                        .map(|layout| (values[value], backend.release_thunks[&layout]))
+            let effects = &prepared.ownership()[index][instruction_index];
+            builder.cleanup = effects
+                .failure
+                .releases
+                .iter()
+                .map(|release| {
+                    let source = match release.source {
+                        super::OwnershipSource::Value(value) => {
+                            super::cleanup::CleanupSource::Value(values[&value])
+                        }
+                        super::OwnershipSource::Home(home) => {
+                            super::cleanup::CleanupSource::Home(homes[&home])
+                        }
+                    };
+                    (source, backend.release_thunks[&release.layout])
                 })
                 .collect();
             if let ir::Instruction::Portable(ir::PortableInstruction::MatchPattern {
@@ -244,12 +234,30 @@ pub(super) fn lower_native_ir(
                 instruction,
                 NativeLowering {
                     function,
+                    ownership: effects,
                     values: &values,
                     homes: &homes,
                     mutable_parameter_homes,
                     backend,
                 },
             )?;
+            if let Some((source, layout)) = effects.retain_source {
+                backend.objects.retain(builder, values[&source], layout);
+            }
+            if let Some(layout) = effects.retain_result {
+                backend
+                    .objects
+                    .retain(builder, result.expect("planned owned result"), layout);
+            }
+            if let Some(release) = effects.release {
+                let super::OwnershipSource::Value(value) = release.source else {
+                    unreachable!()
+                };
+                backend
+                    .objects
+                    .release(builder, module, values[&value], release.layout)?;
+                propagate_native_failure(builder, module)?;
+            }
             let destinations = instruction.destinations();
             if let Some(destination) = destinations.first() {
                 values.insert(
@@ -305,7 +313,7 @@ pub(super) fn lower_native_ir(
 #[allow(clippy::too_many_arguments)]
 fn lower_native_pattern(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     subject: PatternSubject,
     pattern: &Pattern,
     objects: ObjectRuntime<'_>,
@@ -404,7 +412,7 @@ fn lower_native_pattern(
 #[allow(clippy::too_many_arguments)]
 fn lower_native_pattern_static(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     subject: PatternSubject,
     pattern: &Pattern,
     objects: ObjectRuntime<'_>,
@@ -865,7 +873,7 @@ fn lower_native_pattern_static(
 #[allow(clippy::too_many_arguments)]
 fn pattern_projection(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     object: ClifValue,
     offset: u32,
     storage: ValueLayout,
@@ -962,7 +970,7 @@ pub(super) fn native_type_semantic(ty: NativeType, layouts: &LayoutRegistry) -> 
 
 fn lower_native_instruction(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     instruction: &ir::Instruction,
     context: NativeLowering<'_, '_>,
 ) -> Result<Option<ClifValue>, FosterError> {
@@ -1183,9 +1191,6 @@ fn lower_native_instruction(
                 .ins()
                 .func_addr(module.target_config().pointer_type(), release);
             let environment = get(source);
-            backend
-                .objects
-                .retain(builder, environment, environment_layout);
             store_physical_value(builder, object, code_offset, code);
             store_physical_value(builder, object, environment_offset, environment);
             store_physical_value(builder, object, release_offset, release);
@@ -1195,7 +1200,7 @@ fn lower_native_instruction(
             destination,
             source,
         } => {
-            let NativeType::Object(layout) = function.value_type(*destination) else {
+            let NativeType::Object(_) = function.value_type(*destination) else {
                 return Err(native_error("String bytes require an object layout"));
             };
             let string_layout = backend.objects.layouts.string_layout();
@@ -1205,14 +1210,12 @@ fn lower_native_instruction(
                 .physical
                 .record_field(string_layout, 0)
                 .ok_or_else(|| native_error("String requires byte storage"))?;
-            let object = builder.ins().load(
+            builder.ins().load(
                 module.target_config().pointer_type(),
                 MemFlagsData::trusted(),
                 get(source),
                 field.offset as i32,
-            );
-            backend.objects.retain(builder, object, layout);
-            object
+            )
         }
         ir::Instruction::BoxValue {
             destination,
@@ -1233,12 +1236,7 @@ fn lower_native_instruction(
             let object = backend.objects.allocate(builder, module, layout)?;
             let value = get(source);
             store_physical_value(builder, object, value_offset, value);
-            let release = if let Some(source_layout) = backend
-                .objects
-                .layouts
-                .managed_layout(function.value_type(*source))
-            {
-                backend.objects.retain(builder, value, source_layout);
+            let release = if let Some((_, source_layout)) = context.ownership.retain_source {
                 let release = module
                     .declare_func_in_func(backend.release_thunks[&source_layout], builder.func);
                 builder
@@ -1259,17 +1257,7 @@ fn lower_native_instruction(
             store_physical_value(builder, object, semantic_offset, semantic);
             object
         }
-        ir::Instruction::ContractView { source, .. } => {
-            let value = get(source);
-            if let Some(layout) = backend
-                .objects
-                .layouts
-                .managed_layout(function.value_type(*source))
-            {
-                backend.objects.retain(builder, value, layout);
-            }
-            value
-        }
+        ir::Instruction::ContractView { source, .. } => get(source),
         ir::Instruction::UnboxValue {
             destination,
             source,
@@ -1283,16 +1271,12 @@ fn lower_native_instruction(
                 return Err(native_error("unboxed value has the wrong physical layout"));
             };
             let ty = function.value_type(*destination);
-            let value = builder.ins().load(
+            builder.ins().load(
                 cranelift_type(ty, module.target_config().pointer_type()),
                 MemFlagsData::trusted(),
                 get(source),
                 value_offset as i32,
-            );
-            if let Some(value_layout) = backend.objects.layouts.managed_layout(ty) {
-                backend.objects.retain(builder, value, value_layout);
-            }
-            value
+            )
         }
         ir::Instruction::ConvertResultError {
             destination,

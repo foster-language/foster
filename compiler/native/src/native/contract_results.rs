@@ -512,14 +512,14 @@ pub(super) fn erased_fields(environment: NativeIrEnvironment<'_>) -> BTreeSet<(L
 /// layouts actually returned through this view need a branch; other reads stay static.
 pub(super) fn with_layout(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     object: ClifValue,
     expected: LayoutId,
     results: &[NativeType],
     backend: &NativeBackend<'_>,
     mut lower: impl FnMut(
         &mut FunctionBuilder<'_>,
-        &mut ObjectModule,
+        &mut PhysicalModule,
         LayoutId,
     ) -> Result<Vec<ClifValue>, FosterError>,
 ) -> Result<Vec<ClifValue>, FosterError> {

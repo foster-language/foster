@@ -2,7 +2,7 @@
 use super::*;
 
 pub(super) fn define(
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     backend: &NativeBackend<'_>,
 ) -> Result<(), FosterError> {
     let objects = backend.objects;
@@ -132,7 +132,7 @@ pub(super) fn define(
         builder.seal_all_blocks();
         builder.finalize(module.target_config());
         module
-            .define_function(id, &mut context)
+            .plan_function(id, &mut context)
             .map_err(|error| native_error(format!("cannot define {name}: {error}")))?;
     }
     if backend.ir.program.metadata.main_arguments {
@@ -143,7 +143,7 @@ pub(super) fn define(
 
 /// Transfer host-imported strings into an ordinary Arguments record and List<String>.
 fn define_arguments(
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     backend: &NativeBackend<'_>,
 ) -> Result<(), FosterError> {
     let objects = backend.objects;
@@ -229,7 +229,7 @@ fn define_arguments(
     builder.seal_all_blocks();
     builder.finalize(module.target_config());
     module
-        .define_function(id, &mut context)
+        .plan_function(id, &mut context)
         .map_err(|error| native_error(format!("cannot define argument importer: {error}")))?;
     Ok(())
 }

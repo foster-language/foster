@@ -1,13 +1,13 @@
 //! Runtime handle layouts, descriptors, and allocation.
 use super::{
     ClifValue, FosterError, FunctionBuilder, InstBuilder, LayoutId, LayoutKind, MemFlagsData,
-    Module, NativeBackend, NativeType, ObjectModule, ObjectRuntime, PhysicalKind, ValueLayout,
+    Module, NativeBackend, NativeType, ObjectRuntime, PhysicalKind, PhysicalModule, ValueLayout,
     cranelift_type, native_error, native_verification_type, store_physical_value,
 };
 
 pub(super) fn native_reference_receiver(
     builder: &mut FunctionBuilder<'_>,
-    module: &ObjectModule,
+    module: &PhysicalModule,
     value: ClifValue,
     mut ty: NativeType,
     backend: &NativeBackend<'_>,
@@ -82,7 +82,7 @@ pub(super) fn native_handle_layout(
 
 pub(super) fn native_release_address(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     ty: NativeType,
     backend: &NativeBackend<'_>,
 ) -> ClifValue {
@@ -100,7 +100,7 @@ pub(super) fn native_release_address(
 
 fn native_descriptor_address(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     ty: NativeType,
     backend: &NativeBackend<'_>,
 ) -> ClifValue {
@@ -119,7 +119,7 @@ fn native_descriptor_address(
 
 pub(super) fn allocate_native_handle(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     layout: LayoutId,
     handle: ClifValue,
     value_type: NativeType,

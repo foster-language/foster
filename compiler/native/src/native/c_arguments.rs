@@ -3,7 +3,7 @@ use super::*;
 
 pub(super) fn lower(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     context: NativeLowering<'_, '_>,
     builtin: crate::intrinsics::Builtin,
     destination: ir::Value,
@@ -211,7 +211,7 @@ pub(super) fn lower(
 /// Managed record layout never crosses the C ABI boundary.
 pub(super) fn lower_scalars(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     context: NativeLowering<'_, '_>,
     destination: ir::Value,
     arguments: &[ir::Value],

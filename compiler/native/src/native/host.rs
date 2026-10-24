@@ -1,8 +1,8 @@
 //! Marshal native host calls and decode their responses.
 use super::{
     ClifValue, FosterError, FunctionBuilder, InstBuilder, IntCC, LayoutId, Linkage, MemFlagsData,
-    Module, NativeType, ObjectModule, ObjectRuntime, PhysicalKind, ValueLayout, ValueSemantic, abi,
-    allocate_native_buffer, allocate_native_buffer_dynamic, allocate_native_bytes, ir,
+    Module, NativeType, ObjectRuntime, PhysicalKind, PhysicalModule, ValueLayout, ValueSemantic,
+    abi, allocate_native_buffer, allocate_native_buffer_dynamic, allocate_native_bytes, ir,
     native_buffer_layout, native_bytes_layout, native_error, propagate_native_failure,
     runtime_call, signature, store_physical_value, types,
 };
@@ -15,7 +15,7 @@ pub(super) struct NativeHostArguments<'a> {
 
 pub(super) fn lower_native_host_intrinsic(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     builtin: crate::intrinsics::Builtin,
     arguments: NativeHostArguments<'_>,
     result_type: NativeType,
@@ -86,7 +86,7 @@ pub(super) fn lower_native_host_intrinsic(
 
 fn call_native_host(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     builtin: crate::intrinsics::Builtin,
     arguments: NativeHostArguments<'_>,
     function: &ir::Function,
@@ -98,7 +98,7 @@ fn call_native_host(
         .ins()
         .iconst(types::I64, i64::from(builtin.descriptor().bytecode_tag));
     let call = |builder: &mut FunctionBuilder<'_>,
-                module: &mut ObjectModule,
+                module: &mut PhysicalModule,
                 helper,
                 parameters: Vec<NativeType>,
                 values: &[ClifValue]| {
@@ -255,7 +255,7 @@ fn call_native_host(
 
 fn native_host_bytes_argument(
     builder: &mut FunctionBuilder<'_>,
-    module: &ObjectModule,
+    module: &PhysicalModule,
     argument: ir::Value,
     object: ClifValue,
     function: &ir::Function,
@@ -280,7 +280,7 @@ fn native_host_bytes_argument(
 
 fn lower_native_host_result(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     builtin: crate::intrinsics::Builtin,
     response: ClifValue,
     layout: LayoutId,
@@ -370,7 +370,7 @@ fn lower_native_host_result(
 
 fn lower_native_host_success(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     builtin: crate::intrinsics::Builtin,
     response: ClifValue,
     value: ValueLayout,
@@ -431,7 +431,7 @@ fn lower_native_host_success(
 
 fn lower_native_host_error(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     response: ClifValue,
     layout: LayoutId,
     objects: ObjectRuntime<'_>,
@@ -483,7 +483,7 @@ fn lower_native_host_error(
 
 fn lower_native_host_bytes(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     response: ClifValue,
     layout: LayoutId,
     objects: ObjectRuntime<'_>,
@@ -515,7 +515,7 @@ fn lower_native_host_bytes(
 
 fn lower_native_host_string_list(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     response: ClifValue,
     layout: LayoutId,
     objects: ObjectRuntime<'_>,
@@ -574,7 +574,7 @@ fn lower_native_host_string_list(
 
 fn native_int_to_word(
     builder: &mut FunctionBuilder<'_>,
-    module: &ObjectModule,
+    module: &PhysicalModule,
     value: ClifValue,
 ) -> ClifValue {
     let word = module.target_config().pointer_type();
@@ -587,7 +587,7 @@ fn native_int_to_word(
 
 fn native_word_to_int(
     builder: &mut FunctionBuilder<'_>,
-    module: &ObjectModule,
+    module: &PhysicalModule,
     value: ClifValue,
 ) -> ClifValue {
     if module.target_config().pointer_type() == types::I64 {
@@ -599,7 +599,7 @@ fn native_word_to_int(
 
 fn native_host_integer(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     response: ClifValue,
     index: i64,
 ) -> Result<ClifValue, FosterError> {
@@ -618,7 +618,7 @@ fn native_host_integer(
 
 fn native_host_string(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     response: ClifValue,
     field: i64,
     index: impl IntoNativeHostIndex,
@@ -655,7 +655,7 @@ impl IntoNativeHostIndex for ClifValue {
 
 fn require_native_host_response(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     response: ClifValue,
 ) -> Result<(), FosterError> {
     runtime_call(
@@ -680,7 +680,9 @@ fn require_native_host_response(
     let release = module
         .declare_function(abi::HOST_RELEASE, Linkage::Import, &release_signature)
         .map_err(|error| native_error(format!("cannot declare host response cleanup: {error}")))?;
-    builder.cleanup.insert(0, (response, release));
+    builder
+        .cleanup
+        .insert(0, (super::cleanup::CleanupSource::Value(response), release));
     propagate_native_failure(builder, module)?;
     builder.cleanup.remove(0);
     Ok(())
@@ -688,7 +690,7 @@ fn require_native_host_response(
 
 fn release_native_host_response(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     response: ClifValue,
 ) -> Result<(), FosterError> {
     runtime_call(

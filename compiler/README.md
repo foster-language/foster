@@ -7,7 +7,9 @@ has two dependencies:
   checking, compiled libraries, shared SSA/optimization, and bytecode generation.
 - `foster-compiler-native` (`native/`) consumes checked compilations and immutable
   shared SSA to plan layouts, specialize, lower, verify, and emit native objects.
-  Cranelift is confined to this crate.
+  Cranelift is confined to this crate. `NativeProgram::physical_ir()` expands ownership
+  and failure exits into verified target-level CFGs. `PhysicalProgram::emit_object()`
+  consumes those graphs without source metadata or ownership bookkeeping.
 
 [`bootstrap/`](bootstrap/README.md) compiles the core sources without their generated
 library. `core/build.rs` uses it to generate the bundles embedded by the core.

@@ -9,12 +9,15 @@ pub(super) struct FailureCleanup {
 
 /// Keep the active instruction's cleanup with the builder so failures inside nested
 /// lowering helpers use the same ownership boundary as direct calls and assertions.
+#[derive(Clone, Copy)]
+pub(super) enum CleanupSource {
+    Value(ClifValue),
+    Home(StackSlot),
+}
+
 pub(super) struct NativeBuilder<'a> {
     inner: cranelift_frontend::FunctionBuilder<'a>,
-    pub cleanup: Vec<(ClifValue, FuncId)>,
-    /// Address-taken owners may be replaced by a failing call. Reload these
-    /// homes on the failure edge instead of releasing their pre-call values.
-    pub cleanup_homes: HashMap<ClifValue, StackSlot>,
+    pub cleanup: Vec<(CleanupSource, FuncId)>,
     /// Provisional borrowed execution-state handle, initially defined in entry.
     /// Finalization removes it or chooses a dominating acquisition block.
     pub failure_state: Option<ClifValue>,
@@ -30,7 +33,6 @@ impl<'a> NativeBuilder<'a> {
         Self {
             inner: cranelift_frontend::FunctionBuilder::new(function, context),
             cleanup: Vec::new(),
-            cleanup_homes: HashMap::new(),
             failure_state: None,
             failure_reads: Vec::new(),
             uncached_failure: None,

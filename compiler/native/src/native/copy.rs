@@ -3,7 +3,7 @@ use super::*;
 
 pub(super) fn lower(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     receiver: ClifValue,
     ty: NativeType,
     query: bool,

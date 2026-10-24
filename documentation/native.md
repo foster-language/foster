@@ -209,6 +209,23 @@ ownership-bearing object copies become explicit retain operations, consuming cal
 SSA value, and COW mutation is explicit before a field or index store. The bytecode backend remains
 an independent de-SSA consumer of the same graph.
 
+After native optimization, each prepared instruction has immutable `OwnershipEffects`.
+These record result/source retains, ordinary drops, and frame failure releases with
+resolved layouts. A failure release names either an SSA value or a storage home;
+homes are reloaded on the failure edge because a failing call can replace a binding.
+`NativeFunction::ownership()` exposes these effects alongside its specialized SSA body.
+
+`NativeProgram::physical_ir()` then expands the entire program into target-level
+Cranelift SSA, without compiling machine code. This physical native IR includes
+nested pattern binding retains/releases, buffer-growth temporaries, host-response
+cleanup, destructors and thunks. Failure tests branch to explicit cleanup blocks
+that reload replaced storage homes, release live owners and return the ABI
+placeholder. Each complete function is verified before it enters `PhysicalProgram`.
+`PhysicalProgram::emit_ir()` renders these CFGs; `functions()` provides read-only
+access. The artifact owns its declarations, data and functions and can outlive the
+source compilation. Machine-code emission consumes it without ownership planning
+or helper expansion. `NativeProgram::emit_ir()` retains the specialized SSA view.
+
 SSA instructions carry their source spans, and captures carry their value/type pairs. Temporary
 construction buffers enter through length-checked adapters. `SharedProgram` exposes immutable
 access to its functions, metadata, and derived signatures; sealing validates both the construction
@@ -274,8 +291,9 @@ from their receiving blocks or callee ABIs, without constraining live producers 
 The portable, versioned bytecode remains the VM's execution and distribution format. The native
 IR is a shared internal backend boundary rather than a replacement for bytecode, leaving room for
 the VM and other native code generators without exposing Cranelift types to the frontend. Its
-Foster scalar types map to Cranelift types only in the Cranelift emitter. All reachable functions
-are declared before any is defined, allowing direct recursion and mutual recursion.
+Foster scalar types map to Cranelift types during physical native IR lowering. All reachable
+functions are declared before graph construction, allowing direct recursion and mutual recursion.
+Every physical graph is completed and verified before machine-code emission begins.
 
 `SharedProgram::optimized()` is the common semantic pipeline: bounded scalar leaf inlining,
 constant propagation, branch pruning, unreachable-block removal, and dead scalar elimination.

@@ -1,7 +1,7 @@
 //! Control flow, arithmetic, runtime calls, and failure propagation.
 use super::{
     BinaryOp, ClifBlock, ClifValue, FloatCC, FosterError, FunctionBuilder, HashMap, InstBuilder,
-    IntCC, LayoutKind, LayoutRegistry, Linkage, Module, NativeType, ObjectModule, abi,
+    IntCC, LayoutKind, LayoutRegistry, Linkage, Module, NativeType, PhysicalModule, abi,
     cranelift_representation, ir, native_error, types,
 };
 
@@ -57,7 +57,7 @@ pub(super) fn lower_native_terminator(
 
 pub(super) fn lower_binary(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     operator: BinaryOp,
     operand_type: NativeType,
     left: ClifValue,
@@ -232,7 +232,7 @@ pub(super) fn lower_binary(
 
 pub(super) fn runtime_call(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     name: &str,
     source_signature: &ir::Signature,
     arguments: &[ClifValue],
@@ -262,7 +262,7 @@ pub(super) fn runtime_call(
 
 fn runtime_reference(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     name: &str,
     source_signature: &ir::Signature,
 ) -> Result<cranelift_codegen::ir::FuncRef, FosterError> {
@@ -295,7 +295,7 @@ fn runtime_reference(
 /// The thread retains the error; callers check it before treating a return as a result.
 pub(super) fn propagate_native_failure(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
 ) -> Result<(), FosterError> {
     let state = if let Some(state) = builder.failure_state {
         state
@@ -363,7 +363,7 @@ pub(super) fn propagate_native_failure(
 
 fn propagate_native_failure_status(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     pending: ClifValue,
 ) {
     let failed = builder.create_block();
@@ -371,13 +371,14 @@ fn propagate_native_failure_status(
     builder.ins().brif(pending, failed, &[], continuation, &[]);
     builder.switch_to_block(failed);
     for (value, release) in builder.cleanup.clone() {
-        let value = if let Some(home) = builder.cleanup_homes.get(&value).copied() {
-            let pointer_type = module.target_config().pointer_type();
-            builder
-                .ins()
-                .stack_load(pointer_type, pointer_type, home, 0)
-        } else {
-            value
+        let value = match value {
+            super::cleanup::CleanupSource::Value(value) => value,
+            super::cleanup::CleanupSource::Home(home) => {
+                let pointer_type = module.target_config().pointer_type();
+                builder
+                    .ins()
+                    .stack_load(pointer_type, pointer_type, home, 0)
+            }
         };
         let release = module.declare_func_in_func(release, builder.func);
         builder.ins().call(release, &[value]);
@@ -394,7 +395,7 @@ fn propagate_native_failure_status(
 
 pub(super) fn fail_if(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     condition: ClifValue,
     kind: i64,
     detail: ClifValue,
@@ -428,7 +429,7 @@ pub(super) fn zero_i64(builder: &mut FunctionBuilder<'_>) -> ClifValue {
 
 pub(super) fn write_native_value(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     value: ClifValue,
     ty: NativeType,
 ) -> Result<(), FosterError> {
@@ -462,7 +463,7 @@ pub(super) fn write_native_value(
 
 pub(super) fn write_native_separator(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
 ) -> Result<(), FosterError> {
     runtime_call(
         builder,
@@ -479,7 +480,7 @@ pub(super) fn write_native_separator(
 
 pub(super) fn write_native_newline(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
 ) -> Result<(), FosterError> {
     runtime_call(
         builder,
@@ -517,14 +518,14 @@ mod tests {
     use super::*;
     use crate::native::FunctionBuilderContext;
 
-    fn test_module() -> ObjectModule {
+    fn test_module() -> PhysicalModule {
         let isa = cranelift_native::builder()
             .unwrap()
             .finish(cranelift_codegen::settings::Flags::new(
                 cranelift_codegen::settings::builder(),
             ))
             .unwrap();
-        ObjectModule::new(
+        PhysicalModule::new(
             cranelift_object::ObjectBuilder::new(
                 isa,
                 "failure-state-test",
@@ -593,7 +594,7 @@ mod tests {
             builder.finalize(module.target_config());
         }
         // This rejects a cached value defined only in the first sibling branch.
-        module.define_function(id, &mut context).unwrap();
+        module.plan_function(id, &mut context).unwrap();
     }
 
     #[test]
@@ -629,6 +630,6 @@ mod tests {
             builder.seal_all_blocks();
             builder.finalize(module.target_config());
         }
-        module.define_function(id, &mut context).unwrap();
+        module.plan_function(id, &mut context).unwrap();
     }
 }

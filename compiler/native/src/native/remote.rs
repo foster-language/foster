@@ -2,7 +2,7 @@
 use super::{
     AlternativeLayout, ClifValue, FosterError, FunctionBuilder, FunctionId, InstBuilder, IntCC,
     LayoutId, LayoutKind, MemFlagsData, Module, NativeBackend, NativeLowering, NativeType,
-    ObjectModule, ObjectRuntime, ParameterMode, PhysicalKind, StackSlotData, StackSlotKind, abi,
+    ObjectRuntime, ParameterMode, PhysicalKind, PhysicalModule, StackSlotData, StackSlotKind, abi,
     allocate_native_handle, ir, load_physical_value, native_error, native_handle_layout,
     native_release_address, native_to_remote_word, native_verification_type, remote_word_to_native,
     runtime_call, store_physical_value, types,
@@ -10,7 +10,7 @@ use super::{
 
 pub(super) fn lower_native_spawn_remote(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     destination: ir::Value,
     source: ir::Value,
     borrowed: bool,
@@ -70,7 +70,7 @@ pub(super) fn lower_native_spawn_remote(
 
 pub(super) fn lower_native_remote_call(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     destination: ir::Value,
     remote: ir::Value,
     target: FunctionId,
@@ -202,7 +202,7 @@ pub(super) fn lower_native_remote_call(
 
 pub(super) fn lower_native_await(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     destination: ir::Value,
     future: ir::Value,
     context: NativeLowering<'_, '_>,
@@ -316,7 +316,7 @@ pub(super) fn lower_native_await(
 /// Transfer a freshly owned payload into a remote outcome variant.
 fn native_outcome_variant(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     layout: LayoutId,
     name: &str,
     payload: ClifValue,
@@ -360,7 +360,7 @@ fn native_outcome_variant(
 
 pub(super) fn lower_result_error_conversion(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     source: ClifValue,
     source_type: NativeType,
     target_type: NativeType,

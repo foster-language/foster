@@ -15,7 +15,7 @@ pub struct NativeFunction {
     pub(super) ir: ir::Function,
     pub(super) mutable_parameter_homes: HashSet<u16>,
     pub(super) home_types: std::collections::BTreeMap<u16, NativeType>,
-    pub(super) failure_cleanup: FailureCleanup,
+    ownership: Vec<Vec<OwnershipEffects>>,
     logical_signature: LogicalSignature,
     management: Vec<MemoryManagement>,
     // Logical evidence keyed by the original SSA identity, retaining CFG alternatives.
@@ -23,6 +23,10 @@ pub struct NativeFunction {
 }
 
 impl NativeFunction {
+    pub fn ownership(&self) -> &[Vec<OwnershipEffects>] {
+        &self.ownership
+    }
+
     pub fn ir(&self) -> &ir::Function {
         &self.ir
     }
@@ -52,10 +56,10 @@ impl NativeFunction {
     }
 }
 
-/// A reusable host-native program, fully lowered and verified before any object is emitted.
+/// Verified specialized native SSA, ready for complete physical CFG lowering.
 ///
 /// Rendering and object emission consume the same immutable functions, layouts, and call targets.
-/// The source compilation is borrowed only for nominal/source metadata used by the emitter.
+/// Physical lowering borrows nominal/source metadata. Its finished artifact is independent.
 pub struct NativeProgram<'a> {
     pub(super) compilation: &'a Compilation,
     canonical: std::sync::Arc<crate::codegen::shared::SharedProgram>,
@@ -331,12 +335,13 @@ fn prepare_shared(
                     .collect()
             })
             .collect();
+        let ownership = super::ownership_ir::plan(&lowered, &failure_cleanup, layouts);
         prepared.functions.push(NativeFunction {
             instance: instance.clone(),
             ir: lowered,
             mutable_parameter_homes,
             home_types,
-            failure_cleanup,
+            ownership,
             management,
             logical_signature: LogicalSignature {
                 captures: source.capture_types.iter().map(specialize).collect(),
@@ -357,6 +362,20 @@ fn prepare_shared(
 }
 
 impl NativeProgram<'_> {
+    /// Expand all ownership and failure behavior into verified target-level SSA.
+    /// This performs no machine-code compilation. The result is independent of
+    /// this program and the source compilation.
+    pub fn physical_ir(&self) -> Result<PhysicalProgram, FosterError> {
+        crate::compiler::profile::measure("native.physical", || {
+            super::physical::lower(
+                self,
+                CompileOptions {
+                    optimize: self.optimized,
+                },
+            )
+        })
+    }
+
     /// Shared logical metadata, independent of bytecode construction and native machine code.
     pub fn metadata(&self) -> &crate::codegen::metadata::ProgramMetadata {
         &self.program.metadata
@@ -384,6 +403,27 @@ impl NativeProgram<'_> {
                 function.ir
             )
             .unwrap();
+            for (block, effects) in function.ownership.iter().enumerate() {
+                for (instruction, effects) in effects.iter().enumerate() {
+                    if effects.retain_result.is_some()
+                        || effects.retain_source.is_some()
+                        || effects.release.is_some()
+                        || !effects.failure.releases.is_empty()
+                    {
+                        // Rendering must not expose randomized live-home map iteration.
+                        // Keep the execution plan's cleanup order unchanged.
+                        let mut effects = effects.clone();
+                        effects
+                            .failure
+                            .releases
+                            .sort_by_key(|release| match release.source {
+                                OwnershipSource::Value(value) => (0, value.index()),
+                                OwnershipSource::Home(home) => (1, usize::from(home)),
+                            });
+                        writeln!(output, "; ownership b{block}:{instruction} {effects:?}").unwrap();
+                    }
+                }
+            }
         }
         output
     }
@@ -396,7 +436,8 @@ impl NativeProgram<'_> {
 
     fn compile_object_inner(&self, options: CompileOptions) -> Result<ObjectArtifact, FosterError> {
         if options.optimize == self.optimized {
-            return crate::compiler::profile::measure("native.emit", || emit_object(self, options));
+            let physical = self.physical_ir()?;
+            return crate::compiler::profile::measure("native.emit", || physical.emit_object());
         }
         if self.alternate.get().is_none() {
             let prepared = crate::compiler::profile::measure("native.prepare", || {
@@ -404,9 +445,8 @@ impl NativeProgram<'_> {
             })?;
             let _ = self.alternate.set(Box::new(prepared));
         }
-        crate::compiler::profile::measure("native.emit", || {
-            emit_object(self.alternate.get().unwrap(), options)
-        })
+        let physical = self.alternate.get().unwrap().physical_ir()?;
+        crate::compiler::profile::measure("native.emit", || physical.emit_object())
     }
 
     pub fn build_executable(

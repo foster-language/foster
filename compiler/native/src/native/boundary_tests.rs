@@ -2,6 +2,115 @@ use super::*;
 use crate::compiler::profile::collect_counters as collect;
 
 #[test]
+fn physical_native_ir_owns_complete_failure_cfgs_before_emission() {
+    use cranelift_codegen::ir::{ExternalName, InstructionData, Opcode};
+    for optimize in [false, true] {
+        // Keep the physical artifact after dropping all source and planning state.
+        let physical = {
+            let compilation = crate::compile(include_str!(
+                "../../../../tests/fixtures/programs/typed_buffer_read_cleanup.fos"
+            ))
+            .unwrap();
+            prepare_with_options(&compilation, CompileOptions { optimize })
+                .unwrap()
+                .physical_ir()
+                .unwrap()
+        };
+        let mut cleanup_returns = 0;
+        for function in physical.functions() {
+            cranelift_codegen::verify_function(function.ir(), physical.module.isa()).unwrap();
+            let body = function.ir();
+            for block in body.layout.blocks() {
+                let Some(last) = body.layout.last_inst(block) else {
+                    continue;
+                };
+                if body.dfg.insts[last].opcode() != Opcode::Return {
+                    continue;
+                }
+                let releases = body
+                    .layout
+                    .block_insts(block)
+                    .filter(|inst| {
+                        let InstructionData::Call { func_ref, .. } = body.dfg.insts[*inst] else {
+                            return false;
+                        };
+                        let ExternalName::User(name) = body.dfg.ext_funcs[func_ref].name else {
+                            return false;
+                        };
+                        let name = &body.params.user_named_funcs()[name];
+                        physical
+                            .module
+                            .declarations()
+                            .get_function_decl(FuncId::from_u32(name.index))
+                            .name
+                            .as_deref()
+                            .is_some_and(|name| name.starts_with("foster_release_l"))
+                    })
+                    .count();
+                let branched_to = body.layout.blocks().any(|predecessor| {
+                    let Some(terminator) = body.layout.last_inst(predecessor) else {
+                        return false;
+                    };
+                    body.dfg.insts[terminator].opcode() == Opcode::Brif
+                        && body.dfg.insts[terminator]
+                            .branch_destination(&body.dfg.jump_tables, &body.dfg.exception_tables)
+                            .iter()
+                            .any(|edge| edge.block(&body.dfg.value_lists) == block)
+                });
+                cleanup_returns += usize::from(releases > 0 && branched_to);
+            }
+        }
+        assert!(
+            cleanup_returns > 0,
+            "failure CFG must contain cleanup calls before frame return"
+        );
+        let rendered = physical.emit_ir();
+        assert!(rendered.contains("brif"));
+        assert!(rendered.contains("return"));
+        assert!(!physical.emit_object().unwrap().bytes.is_empty());
+    }
+}
+
+#[test]
+fn ownership_effects_are_prepared_and_survive_repeated_emission() {
+    let compilation = crate::compile(include_str!(
+        "../../../../tests/fixtures/programs/contract_reference_parameters.fos"
+    ))
+    .unwrap();
+    for optimize in [false, true] {
+        let options = CompileOptions { optimize };
+        let prepared = prepare_with_options(&compilation, options).unwrap();
+        let snapshot = || {
+            prepared
+                .functions()
+                .iter()
+                .map(|f| format!("{:?}", f.ownership()))
+                .collect::<Vec<_>>()
+        };
+        let before = snapshot();
+        let mut releases = 0;
+        for function in prepared.functions() {
+            assert_eq!(function.ir().blocks.len(), function.ownership().len());
+            for (block, effects) in function.ir().blocks.iter().zip(function.ownership()) {
+                assert_eq!(block.instructions.len(), effects.len());
+                for effects in effects {
+                    releases += effects.failure.releases.len();
+                    for release in &effects.failure.releases {
+                        if let OwnershipSource::Home(home) = release.source {
+                            assert!(function.home_types.contains_key(&home));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(releases > 0, "fixture must exercise failure cleanup");
+        prepared.compile_object(options).unwrap();
+        prepared.compile_object(options).unwrap();
+        assert_eq!(before, snapshot());
+    }
+}
+
+#[test]
 fn native_and_vm_reuse_the_same_immutable_shared_programs() {
     let compilation = crate::compile("func main() -> Int { 20 + 22 }").unwrap();
     let baseline = compilation.shared_program(false).unwrap();

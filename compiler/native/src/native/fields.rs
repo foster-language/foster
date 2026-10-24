@@ -1,7 +1,7 @@
 //! Physical record field access.
 use super::{
     ClifValue, FosterError, FunctionBuilder, InstBuilder, IntCC, LayoutKind, MemFlagsData, Module,
-    NativeType, ObjectModule, ObjectRuntime, abi, fail_if, load_physical_value,
+    NativeType, ObjectRuntime, PhysicalModule, abi, fail_if, load_physical_value,
     native_buffer_layout, native_buffer_tail, native_bytes_layout, native_bytes_tail, native_error,
     physical_cranelift_type, types, zero_i64,
 };
@@ -9,7 +9,7 @@ use super::{
 #[allow(clippy::too_many_arguments)]
 pub(super) fn lower_native_field(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     receiver: ClifValue,
     receiver_type: NativeType,
     result_type: NativeType,
@@ -73,7 +73,7 @@ pub(super) fn lower_native_field(
 #[allow(clippy::too_many_arguments)]
 fn lower_native_field_static(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     receiver: ClifValue,
     receiver_type: NativeType,
     result_type: NativeType,

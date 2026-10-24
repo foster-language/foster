@@ -1,14 +1,14 @@
 //! Native byte and element buffer allocation, copying, and growth.
 use super::{
     ClifValue, FosterError, FunctionBuilder, InstBuilder, IntCC, LayoutId, MemFlagsData, Module,
-    NativeType, ObjectModule, ObjectRuntime, ValueLayout, abi, fail_if, ir, native_buffer_layout,
+    NativeType, ObjectRuntime, PhysicalModule, ValueLayout, abi, fail_if, ir, native_buffer_layout,
     native_bytes_layout, native_error, physical_cranelift_type, runtime_call, store_physical_value,
     types,
 };
 
 fn allocate_byte_data(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     length: ClifValue,
 ) -> Result<ClifValue, FosterError> {
     let word = module.target_config().pointer_type();
@@ -33,7 +33,7 @@ fn allocate_byte_data(
 
 pub(super) fn allocate_native_bytes(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     objects: ObjectRuntime<'_>,
     layout: LayoutId,
     length: ClifValue,
@@ -48,7 +48,7 @@ pub(super) fn allocate_native_bytes(
 
 pub(super) fn allocate_native_byte_buffer(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     objects: ObjectRuntime<'_>,
     layout: LayoutId,
     length: ClifValue,
@@ -70,7 +70,7 @@ pub(super) fn allocate_native_byte_buffer(
 
 pub(super) fn copy_native_bytes(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     destination: ClifValue,
     source: ClifValue,
     length: ClifValue,
@@ -90,7 +90,7 @@ pub(super) fn copy_native_bytes(
 
 pub(super) fn native_bytes_tail(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     source: ClifValue,
     layout: LayoutId,
     objects: ObjectRuntime<'_>,
@@ -116,7 +116,7 @@ pub(super) fn native_bytes_tail(
 
 pub(super) fn allocate_native_buffer(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     layout: LayoutId,
     length: usize,
     objects: ObjectRuntime<'_>,
@@ -155,7 +155,7 @@ pub(super) fn allocate_native_buffer(
 
 pub(super) fn native_buffer_element_address(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     object: ClifValue,
     index: ClifValue,
     layout: LayoutId,
@@ -186,7 +186,7 @@ pub(super) fn native_buffer_element_address(
 
 fn copy_native_buffer_elements(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     source: ClifValue,
     target: ClifValue,
     layout: LayoutId,
@@ -241,7 +241,7 @@ fn copy_native_buffer_elements(
 
 pub(super) fn clone_native_buffer(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     source: ClifValue,
     layout: LayoutId,
     objects: ObjectRuntime<'_>,
@@ -260,7 +260,7 @@ pub(super) fn clone_native_buffer(
 
 pub(super) fn native_buffer_tail(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     source: ClifValue,
     layout: LayoutId,
     objects: ObjectRuntime<'_>,
@@ -319,7 +319,7 @@ pub(super) fn native_buffer_tail(
 
 fn copy_native_buffer_data(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     source_data: ClifValue,
     target_data: ClifValue,
     length: ClifValue,
@@ -356,7 +356,7 @@ fn copy_native_buffer_data(
 
 pub(super) fn allocate_native_buffer_dynamic(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     layout: LayoutId,
     length: ClifValue,
     objects: ObjectRuntime<'_>,
@@ -388,7 +388,7 @@ pub(super) fn allocate_native_buffer_dynamic(
 
 pub(super) fn append_native_buffer(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     source: ClifValue,
     value: ClifValue,
     layout: LayoutId,
@@ -397,9 +397,13 @@ pub(super) fn append_native_buffer(
     let target = clone_native_buffer(builder, module, source, layout, objects)?;
     // The new buffer is still private to this instruction if capacity checking
     // fails. Its unique reference can be destroyed before cleaning the frame.
-    builder
-        .cleanup
-        .insert(0, (target, objects.destructors[&layout]));
+    builder.cleanup.insert(
+        0,
+        (
+            super::cleanup::CleanupSource::Value(target),
+            objects.destructors[&layout],
+        ),
+    );
     push_native_buffer(builder, module, target, value, layout, objects)?;
     builder.cleanup.remove(0);
     Ok(target)
@@ -407,7 +411,7 @@ pub(super) fn append_native_buffer(
 
 pub(super) fn push_native_buffer(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     object: ClifValue,
     value: ClifValue,
     layout: LayoutId,
@@ -512,7 +516,7 @@ pub(super) fn push_native_buffer(
 /// Drops initialized elements without releasing the backing allocation.
 pub(super) fn clear_native_buffer(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     object: ClifValue,
     layout: LayoutId,
     objects: ObjectRuntime<'_>,
@@ -560,7 +564,7 @@ pub(super) fn clear_native_buffer(
 /// Detaches shared list storage while retaining its reserved capacity.
 pub(super) fn clone_native_buffer_retaining_capacity(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     source: ClifValue,
     layout: LayoutId,
     objects: ObjectRuntime<'_>,
@@ -585,7 +589,7 @@ pub(super) fn clone_native_buffer_retaining_capacity(
 /// Allocate complete initialized scalar backing storage without growth or element boxing.
 pub(super) fn filled_native_buffer(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     layout: LayoutId,
     length: ClifValue,
     initial: ClifValue,

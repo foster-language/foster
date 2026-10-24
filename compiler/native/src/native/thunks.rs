@@ -2,7 +2,7 @@
 use super::{
     ClifValue, FosterError, FuncId, FunctionBuilder, FunctionBuilderContext, FunctionId, HashMap,
     HashSet, InstBuilder, LayoutId, LayoutKind, Linkage, MemFlagsData, Module, NativeBackend,
-    NativeFunction, NativeInstance, NativeLayouts, NativeType, ObjectModule, PhysicalKind,
+    NativeFunction, NativeInstance, NativeLayouts, NativeType, PhysicalKind, PhysicalModule,
     SpecializationKey, ir, load_physical_value, lower_native_ir, native_error, ordered_entries,
     propagate_native_failure, signature, types,
 };
@@ -30,7 +30,7 @@ fn concrete_closure_target(
 }
 
 pub(super) fn declare_callable_thunks(
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     layouts: NativeLayouts<'_>,
     instances: &HashMap<SpecializationKey, FunctionId>,
     function_types: &HashMap<FunctionId, ir::Signature>,
@@ -66,7 +66,7 @@ pub(super) fn declare_callable_thunks(
 }
 
 pub(super) fn declare_remote_thunks(
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     instances: &[NativeInstance],
     method_receivers: &HashSet<FunctionId>,
 ) -> Result<HashMap<FunctionId, FuncId>, FosterError> {
@@ -94,7 +94,7 @@ pub(super) fn declare_remote_thunks(
 }
 
 pub(super) fn define_function(
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     prepared: &NativeFunction,
     native_id: FuncId,
     backend: &NativeBackend<'_>,
@@ -111,14 +111,14 @@ pub(super) fn define_function(
         builder.finalize(frontend_config);
     }
     module
-        .define_function(native_id, &mut context)
+        .plan_function(native_id, &mut context)
         .map_err(|error| native_error(format!("cannot compile `{}`: {error}", function.name)))?;
     module.clear_context(&mut context);
     Ok(())
 }
 
 pub(super) fn define_callable_thunks(
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     backend: &NativeBackend<'_>,
 ) -> Result<(), FosterError> {
     for (layout, thunk_id) in ordered_entries(backend.callable_thunks) {
@@ -173,7 +173,7 @@ pub(super) fn define_callable_thunks(
             builder.finalize(frontend_config);
         }
         module
-            .define_function(thunk_id, &mut context)
+            .plan_function(thunk_id, &mut context)
             .map_err(|error| {
                 native_error(format!(
                     "cannot compile callable thunk l{}: {error}",
@@ -187,7 +187,7 @@ pub(super) fn define_callable_thunks(
 
 pub(super) fn native_to_remote_word(
     builder: &mut FunctionBuilder<'_>,
-    module: &ObjectModule,
+    module: &PhysicalModule,
     value: ClifValue,
     ty: NativeType,
 ) -> ClifValue {
@@ -212,7 +212,7 @@ pub(super) fn native_to_remote_word(
 
 pub(super) fn remote_word_to_native(
     builder: &mut FunctionBuilder<'_>,
-    module: &ObjectModule,
+    module: &PhysicalModule,
     value: ClifValue,
     ty: NativeType,
 ) -> ClifValue {
@@ -238,7 +238,7 @@ pub(super) fn remote_word_to_native(
 }
 
 pub(super) fn define_remote_thunks(
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     backend: &NativeBackend<'_>,
 ) -> Result<(), FosterError> {
     for (target, thunk_id) in ordered_entries(backend.remote_thunks) {
@@ -315,7 +315,7 @@ pub(super) fn define_remote_thunks(
             builder.finalize(frontend_config);
         }
         module
-            .define_function(thunk_id, &mut context)
+            .plan_function(thunk_id, &mut context)
             .map_err(|error| {
                 native_error(format!(
                     "cannot compile remote thunk for function #{}: {error}",

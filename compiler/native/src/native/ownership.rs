@@ -84,7 +84,7 @@ impl ObjectRuntime<'_> {
     pub(super) fn allocate(
         self,
         builder: &mut FunctionBuilder<'_>,
-        module: &mut ObjectModule,
+        module: &mut PhysicalModule,
         layout: LayoutId,
     ) -> Result<ClifValue, FosterError> {
         allocate_object(
@@ -113,7 +113,7 @@ impl ObjectRuntime<'_> {
     pub(super) fn release(
         self,
         builder: &mut FunctionBuilder<'_>,
-        module: &mut ObjectModule,
+        module: &mut PhysicalModule,
         object: ClifValue,
         layout: LayoutId,
     ) -> Result<(), FosterError> {
@@ -129,7 +129,7 @@ impl ObjectRuntime<'_> {
 }
 
 pub(super) fn declare_layout_destructors(
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     layouts: &PhysicalRegistry,
 ) -> Result<HashMap<LayoutId, FuncId>, FosterError> {
     layouts
@@ -154,7 +154,7 @@ pub(super) fn declare_layout_destructors(
 }
 
 pub(super) fn declare_release_thunks(
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     layouts: NativeLayouts<'_>,
     exported_result: Option<LayoutId>,
 ) -> Result<HashMap<LayoutId, FuncId>, FosterError> {
@@ -195,7 +195,7 @@ pub(super) fn declare_release_thunks(
 }
 
 pub(super) fn define_layout_destructors(
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     layouts: NativeLayouts<'_>,
     destructors: &HashMap<LayoutId, FuncId>,
     environment: NativeIrEnvironment<'_>,
@@ -524,7 +524,7 @@ pub(super) fn define_layout_destructors(
             builder.finalize(frontend_config);
         }
         module
-            .define_function(destructors[&layout.id], &mut context)
+            .plan_function(destructors[&layout.id], &mut context)
             .map_err(|error| {
                 native_error(format!(
                     "cannot compile destructor for l{}: {error}",
@@ -537,7 +537,7 @@ pub(super) fn define_layout_destructors(
 }
 
 pub(super) fn define_release_thunks(
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     layouts: NativeLayouts<'_>,
     destructors: &HashMap<LayoutId, FuncId>,
     release_thunks: &HashMap<LayoutId, FuncId>,
@@ -572,7 +572,7 @@ pub(super) fn define_release_thunks(
             builder.seal_all_blocks();
             builder.finalize(frontend_config);
         }
-        module.define_function(id, &mut context).map_err(|error| {
+        module.plan_function(id, &mut context).map_err(|error| {
             native_error(format!(
                 "cannot compile release thunk l{}: {error}",
                 layout.0
@@ -585,7 +585,7 @@ pub(super) fn define_release_thunks(
 
 pub(super) fn lower_drop_buffer(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     object: ClifValue,
     layout: &crate::codegen::layout::physical::PhysicalLayout,
     element: ValueLayout,
@@ -677,7 +677,7 @@ pub(super) fn lower_drop_buffer(
 
 pub(super) fn lower_drop_fields(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     object: ClifValue,
     fields: &[DropField],
     layouts: NativeLayouts<'_>,
@@ -708,7 +708,7 @@ pub(super) fn lower_drop_fields(
 
 pub(super) fn allocate_object(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     layout: LayoutId,
     physical_layouts: &PhysicalRegistry,
     descriptors: &HashMap<LayoutId, DataId>,
@@ -795,7 +795,7 @@ pub(super) fn retain_object(
 
 pub(super) fn release_object(
     builder: &mut FunctionBuilder<'_>,
-    module: &mut ObjectModule,
+    module: &mut PhysicalModule,
     object: ClifValue,
     layout: LayoutId,
     physical_layouts: &PhysicalRegistry,

@@ -18,7 +18,7 @@ use cranelift_codegen::ir::{condcodes::FloatCC, condcodes::IntCC};
 use cranelift_codegen::settings::{self, Configurable};
 use cranelift_frontend::FunctionBuilderContext;
 use cranelift_module::{DataDescription, DataId, FuncId, Linkage, Module, default_libcall_names};
-use cranelift_object::{ObjectBuilder, ObjectModule};
+use cranelift_object::ObjectBuilder;
 use la_arena::RawIdx;
 
 use crate::ast::{BinaryOp, ParameterMode, UnaryOp};
@@ -115,9 +115,13 @@ mod dispatch;
 use cleanup::{FailureCleanup, NativeBuilder as FunctionBuilder};
 mod emission;
 mod failure_cache;
+mod physical;
 mod text_boundary;
-use emission::{emit_object, ordered_entries};
+pub use physical::{PhysicalFunction, PhysicalProgram};
+use physical::{PhysicalModule, ordered_entries};
 mod ownership;
+mod ownership_ir;
+pub use ownership_ir::{FailurePath, OwnershipEffects, OwnershipSource, Release};
 mod program;
 mod runtime;
 mod runtime_cache;
@@ -193,6 +197,7 @@ struct PatternSubject {
 #[derive(Clone, Copy)]
 struct NativeLowering<'a, 'backend> {
     function: &'a ir::Function,
+    ownership: &'a OwnershipEffects,
     values: &'a HashMap<ir::Value, ClifValue>,
     homes: &'a HashMap<u16, StackSlot>,
     mutable_parameter_homes: &'a HashSet<u16>,

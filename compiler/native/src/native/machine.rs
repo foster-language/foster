@@ -1,11 +1,11 @@
 //! Cranelift signatures and scalar representations.
 use super::{
     AbiParam, ClifSignature, ClifType, ClifValue, FosterError, FunctionBuilder, InstBuilder,
-    MemFlagsData, Module, NativeType, ObjectModule, ScalarKind, ValueLayout, abi, ir, native_error,
-    types,
+    MemFlagsData, Module, NativeType, PhysicalModule, ScalarKind, ValueLayout, abi, ir,
+    native_error, types,
 };
 
-pub(super) fn signature(module: &mut ObjectModule, source: &ir::Signature) -> ClifSignature {
+pub(super) fn signature(module: &mut PhysicalModule, source: &ir::Signature) -> ClifSignature {
     let mut signature = module.make_signature();
     let pointer_type = module.target_config().pointer_type();
     signature.params = source
@@ -101,7 +101,7 @@ pub(super) fn reference_store_helper(ty: NativeType) -> &'static str {
 
 pub(super) fn load_physical_value(
     builder: &mut FunctionBuilder<'_>,
-    module: &ObjectModule,
+    module: &PhysicalModule,
     object: ClifValue,
     offset: u32,
     value: ValueLayout,

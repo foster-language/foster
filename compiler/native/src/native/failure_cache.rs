@@ -149,7 +149,7 @@ pub(super) fn select(function: &mut Function, acquire: Inst, reads: &[Inst], dir
 mod tests {
     use super::*;
     use crate::native::{
-        FunctionBuilder, FunctionBuilderContext, Module, NativeType, ObjectModule, ir,
+        FunctionBuilder, FunctionBuilderContext, Module, NativeType, PhysicalModule, ir,
         propagate_native_failure,
     };
 
@@ -174,7 +174,7 @@ mod tests {
                 cranelift_codegen::settings::builder(),
             ))
             .unwrap();
-        let mut module = ObjectModule::new(
+        let mut module = PhysicalModule::new(
             cranelift_object::ObjectBuilder::new(
                 isa,
                 "cache-analysis-test",
@@ -211,7 +211,7 @@ mod tests {
             builder.switch_to_block(entry);
             let flag = builder.block_params(entry)[0];
             let answer = builder.ins().iconst(cranelift_codegen::ir::types::I64, 42);
-            let query = |builder: &mut FunctionBuilder<'_>, module: &mut ObjectModule| {
+            let query = |builder: &mut FunctionBuilder<'_>, module: &mut PhysicalModule| {
                 propagate_native_failure(builder, module).unwrap()
             };
             match shape {
@@ -311,7 +311,7 @@ mod tests {
             }
         }
         module
-            .define_function(id, &mut context)
+            .plan_function(id, &mut context)
             .unwrap_or_else(|error| panic!("{shape:?}: {error}"));
     }
 
