@@ -1,0 +1,13 @@
+[package]
+name = "foster-native-formatter"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+
+[lib]
+path = "lib.rs"
+
+[build-dependencies]
+foster-compiler-core = { path = "../../compiler/core" }
+foster-compiler-native = { path = "../../compiler/native" }
+cc = "1"

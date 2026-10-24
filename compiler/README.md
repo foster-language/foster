@@ -14,7 +14,8 @@ has two dependencies:
 [`bootstrap/`](bootstrap/README.md) compiles the core sources without their generated
 library. `core/build.rs` uses it to generate the bundles embedded by the core.
 Native source edits rebuild the backend without rebuilding bootstrap or those
-bundles. The driver still regenerates its native formatter when its compiler changes.
+bundles. Native formatter regeneration is isolated in `tools/native-formatter`; bytecode
+tool artifacts under `tools/embedded` depend only on compiler core.
 
 Executable contracts come from [bytecode](../bytecode/README.md) and platform
 contracts from [host](../host/README.md). VM execution is a development dependency.

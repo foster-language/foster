@@ -580,14 +580,19 @@ name = "foster"
 version = "0.1.0"
 dependencies = [
  "camino",
- "cc",
  "clap",
  "criterion",
  "crossbeam-channel",
  "foster-bytecode",
  "foster-compiler",
  "foster-host",
+ "foster-native-formatter",
  "foster-native-runtime",
+ "foster-tool-c-bridge",
+ "foster-tool-documentation",
+ "foster-tool-format",
+ "foster-tool-init",
+ "foster-tool-project",
  "foster-vm",
  "lsp-server",
  "lsp-types",
@@ -671,11 +676,55 @@ name = "foster-host"
 version = "0.1.0"
 
 [[package]]
+name = "foster-native-formatter"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "foster-compiler-core",
+ "foster-compiler-native",
+]
+
+[[package]]
 name = "foster-native-runtime"
 version = "0.1.0"
 dependencies = [
  "foster-host",
  "may",
+]
+
+[[package]]
+name = "foster-tool-c-bridge"
+version = "0.1.0"
+dependencies = [
+ "foster-compiler-core",
+]
+
+[[package]]
+name = "foster-tool-documentation"
+version = "0.1.0"
+dependencies = [
+ "foster-compiler-core",
+]
+
+[[package]]
+name = "foster-tool-format"
+version = "0.1.0"
+dependencies = [
+ "foster-compiler-core",
+]
+
+[[package]]
+name = "foster-tool-init"
+version = "0.1.0"
+dependencies = [
+ "foster-compiler-core",
+]
+
+[[package]]
+name = "foster-tool-project"
+version = "0.1.0"
+dependencies = [
+ "foster-compiler-core",
 ]
 
 [[package]]

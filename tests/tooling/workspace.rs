@@ -49,6 +49,12 @@ fn compiler_core_and_bootstrap_do_not_depend_on_native_generation() {
         ("foster-compiler-core", false),
         ("foster-compiler-native", true),
         ("foster-compiler", true),
+        ("foster-native-formatter", true),
+        ("foster-tool-init", false),
+        ("foster-tool-project", false),
+        ("foster-tool-format", false),
+        ("foster-tool-documentation", false),
+        ("foster-tool-c-bridge", false),
     ] {
         let output = Command::new(env!("CARGO"))
             .args([
@@ -109,6 +115,18 @@ fn execution_packages_build_without_compiler_dependencies() {
     );
     let metadata: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     let packages = metadata["packages"].as_array().unwrap();
+    let driver = packages
+        .iter()
+        .find(|package| package["name"] == "foster")
+        .unwrap();
+    assert!(
+        driver["dependencies"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|dependency| dependency["kind"] != "build"),
+        "driver builds must not regenerate tool artifacts through compiler build dependencies"
+    );
     let names: BTreeSet<_> = packages
         .iter()
         .map(|p| p["name"].as_str().unwrap())
@@ -125,6 +143,12 @@ fn execution_packages_build_without_compiler_dependencies() {
             "foster-bytecode",
             "foster-native-runtime",
             "foster-host",
+            "foster-native-formatter",
+            "foster-tool-init",
+            "foster-tool-project",
+            "foster-tool-format",
+            "foster-tool-documentation",
+            "foster-tool-c-bridge",
         ])
     );
     let dependencies: BTreeMap<_, Vec<_>> = packages

@@ -8,10 +8,7 @@ use crate::{error::FosterError, tooling, vm::Value};
 
 const STYLE: &str = include_str!("../../tools/driver/documentation/style.css");
 const SCRIPT: &str = include_str!("../../tools/driver/documentation/script.html");
-static TOOL: tooling::Tool = tooling::Tool::new(include_bytes!(concat!(
-    env!("OUT_DIR"),
-    "/documentation.fbc"
-)));
+static TOOL: tooling::Tool = tooling::Tool::new(foster_tool_documentation::BYTECODE);
 
 pub(super) struct Site {
     #[cfg(test)]

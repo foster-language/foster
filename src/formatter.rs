@@ -10,8 +10,7 @@ pub fn format(source: &str) -> Result<String, FosterError> {
     return native::format(source);
     #[cfg(not(foster_native_formatter))]
     {
-        static TOOL: tooling::Tool =
-            tooling::Tool::new(include_bytes!(concat!(env!("OUT_DIR"), "/format.fbc")));
+        static TOOL: tooling::Tool = tooling::Tool::new(foster_tool_format::BYTECODE);
         tooling::string(&TOOL.run(vec![source.to_owned()])?)
     }
 }
@@ -19,9 +18,9 @@ pub fn format(source: &str) -> Result<String, FosterError> {
 #[cfg(foster_native_formatter)]
 mod native {
     use super::FosterError;
+    use foster_native_formatter::CONSTANTS;
     use foster_native_runtime as runtime;
     use std::sync::Once;
-    include!(concat!(env!("OUT_DIR"), "/format_constants.rs"));
     unsafe extern "C" {
         fn foster_native_arguments(executable: usize, values: usize, length: i64) -> usize;
         fn foster_native_entry(arguments: usize) -> usize;
@@ -68,8 +67,7 @@ mod tests {
     #[cfg(foster_native_formatter)]
     #[test]
     fn native_and_bytecode_formatters_agree() {
-        static TOOL: super::tooling::Tool =
-            super::tooling::Tool::new(include_bytes!(concat!(env!("OUT_DIR"), "/format.fbc")));
+        static TOOL: super::tooling::Tool = super::tooling::Tool::new(foster_tool_format::BYTECODE);
         let source = "// λ🙂 and literal braces { }\r\nfunc value() -> String {\r\nlet text = \"\"\"\r\n  %{branch { true -> \"{λ}\" _ -> \"}%\" }}%\r\n\"\"\"\r\ntext\r\n}\r\n";
         let interpreted = super::tooling::string(&TOOL.run(vec![source.into()]).unwrap()).unwrap();
         for _ in 0..5 {

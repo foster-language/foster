@@ -18,6 +18,12 @@ name = "foster"
 path = "src/main.rs"
 
 [dependencies]
+foster-tool-init = { path = "tools/embedded/init" }
+foster-tool-project = { path = "tools/embedded/project" }
+foster-tool-format = { path = "tools/embedded/format" }
+foster-tool-documentation = { path = "tools/embedded/documentation" }
+foster-tool-c-bridge = { path = "tools/embedded/c-bridge" }
+foster-native-formatter = { path = "tools/native-formatter" }
 zip = { version = "4", default-features = false, features = ["deflate"] }
 
 foster-compiler = { path = "compiler" }
@@ -38,10 +44,6 @@ walkdir = "2.5"
 [dev-dependencies]
 foster-compiler = { path = "compiler", features = ["test-support"] }
 criterion = { version = "0.8.2", features = ["html_reports"] }
-
-[build-dependencies]
-foster-compiler = { path = "compiler" }
-cc = "1"
 
 [[bench]]
 name = "compiler"
@@ -287,8 +289,8 @@ name = "measure_backends"
 path = "tools/profiling/measure_backends.rs"
 
 [workspace]
-members = ["runtime", "host", "bytecode", "vm", "compiler", "compiler/core", "compiler/native", "compiler/bootstrap"]
-default-members = [".", "runtime", "host", "bytecode", "vm", "compiler", "compiler/core", "compiler/native"]
+members = ["runtime", "host", "bytecode", "vm", "compiler", "compiler/core", "compiler/native", "compiler/bootstrap", "tools/embedded/init", "tools/embedded/project", "tools/embedded/format", "tools/embedded/documentation", "tools/embedded/c-bridge", "tools/native-formatter"]
+default-members = [".", "runtime", "host", "bytecode", "vm", "compiler", "compiler/core", "compiler/native", "tools/embedded/init", "tools/embedded/project", "tools/embedded/format", "tools/embedded/documentation", "tools/embedded/c-bridge", "tools/native-formatter"]
 resolver = "3"
 
 # Integration tests execute the compiler and VM extensively, including native code generation.

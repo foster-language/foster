@@ -1,6 +1,7 @@
 # Rust workspace
 
-Foster has eight primary Rust packages and a build-host bootstrap compiler in one
+Foster has eight primary Rust packages, a build-host bootstrap compiler, and six
+embedded-tool artifact packages in one
 repository. The installed command is `foster`; the other primary packages expose
 reusable implementation libraries.
 
@@ -21,6 +22,8 @@ packages, editor integration, component tests, benchmarks, and research.
 | `foster-native-runtime` | `runtime/src/` | Runtime support linked into native Foster executables |
 | `foster-host` | `host/src/` | Platform services, processes, foreign calls and callbacks, and shared remote lifecycle control |
 | `foster-bootstrap` | `compiler/bootstrap/` | Build-host compiler used to generate the embedded library before the ordinary compiler builds |
+| `foster-tool-*` | `tools/embedded/` | Five independent bytecode artifacts for initialization, projects, formatting, documentation, and the C bridge |
+| `foster-native-formatter` | `tools/native-formatter/` | Native formatter object and constants, generated independently of bytecode tools |
 
 ## Dependency boundaries
 
@@ -36,8 +39,12 @@ The native backend depends on the core's checked compilation and read-only share
 SSA interfaces. The core and build-host bootstrap compiler have no dependency on
 the native backend or Cranelift. Bootstrap compiles the same core source without
 its generated library; the core build script generates and embeds those bundles.
-Native-only edits leave bootstrap and bundled libraries unchanged. The driver still
-uses the native compiler to build its embedded native formatter.
+Native-only edits leave bootstrap, bundled libraries, and all five embedded bytecode
+tools unchanged. Each bytecode artifact has its own build script instance and depends
+only on compiler core. The native formatter has a separate build unit that depends
+on core and native generation. The driver build script only selects the host formatter
+configuration; it has no compiler build dependency. Changing one tool source rebuilds
+only its artifact (both formatter artifacts when formatting policy changes).
 
 Bytecode also owns the executable SSA representation and logical flow engine
 used by both the compiler and bytecode verifier. Keeping this shared validation
@@ -81,7 +88,8 @@ python tools/integration_tests.py --suite language runtime --jobs 2
 cargo fmt --all -- --check
 ```
 
-The workspace default members include all eight primary packages. Existing CLI commands,
+The workspace default members include all eight primary packages and six artifact packages.
+Existing CLI commands,
 Foster package layout, and executable formats are unchanged. Native runtime source
 assembly follows the owning packages when producing its cached standalone runtime.
 

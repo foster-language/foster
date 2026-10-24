@@ -1,6 +1,7 @@
 # Foster-written driver tools
 
-The Rust build compiles these Foster sources and bundles them in `foster`:
+The independent Cargo build units under [`../embedded`](../embedded/README.md)
+compile these Foster sources and bundle them in `foster`:
 
 - `init.fos` creates projects, validates names, and writes starter files.
 - `project.fos` loads and validates manifests, selects discovered projects,
@@ -15,7 +16,7 @@ use its embedded bytecode. The other tools are decoded and verified once per
 process and execute in the VM. Both paths stop cooperatively on editor cancellation.
 Tools use the normal Foster filesystem, path, string, and TOML APIs.
 They do not launch another `foster` process or require source files beside the
-installed executable. The build script uses the compiler's standalone source API,
+installed executable. Each build script uses the compiler core's standalone source API,
 so loading the project tool does not recursively load a project manifest.
 
 Rust retains command-line parsing, compiler diagnostics, conversion of tool

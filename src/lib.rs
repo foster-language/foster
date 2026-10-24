@@ -32,8 +32,7 @@ pub mod vm;
 
 /// Creates a project using the embedded Foster project tool.
 pub fn init_project(path: &Path, name: Option<&str>) -> Result<String, FosterError> {
-    static TOOL: tooling::Tool =
-        tooling::Tool::new(include_bytes!(concat!(env!("OUT_DIR"), "/init.fbc")));
+    static TOOL: tooling::Tool = tooling::Tool::new(foster_tool_init::BYTECODE);
     let mut arguments = vec![
         path.to_str()
             .ok_or_else(|| FosterError::runtime("project path must be valid UTF-8"))?

@@ -12,11 +12,8 @@ fn generator() -> Result<&'static crate::vm::VerifiedProgram, String> {
     static PROGRAM: OnceLock<Result<crate::vm::VerifiedProgram, String>> = OnceLock::new();
     PROGRAM
         .get_or_init(|| {
-            crate::vm::VerifiedProgram::decode(include_bytes!(concat!(
-                env!("OUT_DIR"),
-                "/c_bridge.fbc"
-            )))
-            .map_err(|error| error.to_string())
+            crate::vm::VerifiedProgram::decode(foster_tool_c_bridge::BYTECODE)
+                .map_err(|error| error.to_string())
         })
         .as_ref()
         .map_err(Clone::clone)

@@ -31,8 +31,7 @@ use std::path::{Path, PathBuf};
 
 pub const MANIFEST_NAME: &str = "foster.toml";
 pub const DEFAULT_SOURCE_DIRECTORY: &str = "src";
-static TOOL: tooling::Tool =
-    tooling::Tool::new(include_bytes!(concat!(env!("OUT_DIR"), "/project.fbc")));
+static TOOL: tooling::Tool = tooling::Tool::new(foster_tool_project::BYTECODE);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Project {
