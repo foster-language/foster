@@ -604,11 +604,6 @@ version = "0.1.0"
 dependencies = [
  "ariadne",
  "camino",
- "cranelift-codegen",
- "cranelift-frontend",
- "cranelift-module",
- "cranelift-native",
- "cranelift-object",
  "foster-bytecode",
  "foster-host",
  "foster-vm",

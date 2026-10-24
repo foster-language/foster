@@ -247,6 +247,7 @@ mod tests {
         assert!(ACTIVE.with(|active| active.borrow().is_none()));
     }
 
+    #[cfg(not(foster_bootstrap))]
     #[test]
     fn native_preparation_analyzes_each_body_once_across_specializations() {
         let compilation = crate::compile("func identity<T>(value: T) -> T { value }\nfunc main() -> Int { assert(identity(true))\nassert(identity(1.5) == 1.5)\nidentity(42) }").unwrap();

@@ -5,8 +5,9 @@ compiled libraries, shared optimization, and VM/native code generation. Executab
 contracts are shared with [bytecode](../bytecode/README.md); platform contracts
 come from [host](../host/README.md). VM execution is a development dependency.
 
-`bootstrap/` builds the compiler used to produce the embedded standard library.
-Keep its dependencies aligned with this crate when changing the compiler.
+[`bootstrap/`](bootstrap/README.md) builds the compiler used to produce the embedded
+standard library, excluding the native backend and Cranelift. Keep its non-native
+dependencies aligned with this crate when changing the compiler.
 
 From the repository root:
 

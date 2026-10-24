@@ -13,6 +13,7 @@ pub mod hir;
 pub mod intrinsics;
 pub mod lexer;
 pub mod library;
+#[cfg(not(foster_bootstrap))]
 pub mod native;
 pub mod ownership;
 pub mod package;

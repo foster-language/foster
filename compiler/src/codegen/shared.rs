@@ -1,8 +1,9 @@
 //! Verified shared SSA and its graph-specific analysis evidence.
+#[cfg(not(foster_bootstrap))]
+use super::layout::Registry;
 use super::{
     flow::{FunctionFacts, FunctionSchema},
     ir,
-    layout::Registry,
     metadata::ProgramMetadata,
     program::Program,
 };
@@ -15,6 +16,7 @@ use std::sync::Arc;
 #[derive(Debug, Clone)]
 pub struct SharedProgram {
     pub(crate) program: Arc<Program>,
+    #[cfg(not(foster_bootstrap))]
     pub(crate) layouts: Registry,
     pub(crate) drops_inserted: bool,
     pub(crate) signatures: HashMap<FunctionId, ir::Signature>,
@@ -39,7 +41,7 @@ impl SharedProgram {
     pub fn facts(&self, function: FunctionId) -> &FunctionFacts {
         &self.facts[&function]
     }
-    #[cfg(test)]
+    #[cfg(all(test, not(foster_bootstrap)))]
     pub(crate) fn into_parts(
         self,
     ) -> (
@@ -110,6 +112,7 @@ mod tests {
         for optimize in [true, false, true] {
             crate::vm::compile_with_options(&compilation, crate::vm::CompileOptions { optimize })
                 .unwrap();
+            #[cfg(not(foster_bootstrap))]
             crate::native::prepare_with_options(
                 &compilation,
                 crate::native::CompileOptions { optimize },

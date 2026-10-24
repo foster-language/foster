@@ -2,6 +2,39 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::process::Command;
 
 #[test]
+fn bootstrap_excludes_cranelift_while_the_ordinary_compiler_retains_it() {
+    for (package, native) in [("foster-bootstrap", false), ("foster-compiler", true)] {
+        let output = Command::new(env!("CARGO"))
+            .args([
+                "tree",
+                "--package",
+                package,
+                "--edges",
+                "normal,build",
+                "--prefix",
+                "none",
+                "--format",
+                "{p}",
+                "--offline",
+            ])
+            .current_dir(env!("CARGO_MANIFEST_DIR"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let tree = String::from_utf8(output.stdout).unwrap();
+        let has_cranelift = tree.lines().any(|line| {
+            let name = line.split_whitespace().next().unwrap_or_default();
+            name == "cranelift" || name.starts_with("cranelift-")
+        });
+        assert_eq!(has_cranelift, native, "{package} dependencies:\n{tree}");
+    }
+}
+
+#[test]
 fn execution_packages_build_without_compiler_dependencies() {
     let output = Command::new(env!("CARGO"))
         .args([

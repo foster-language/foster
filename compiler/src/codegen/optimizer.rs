@@ -472,17 +472,20 @@ mod tests {
             0
         );
 
-        let prepared = crate::native::prepare(&compilation).unwrap();
-        let mut native = prepared.functions()[0].ir().clone();
-        let signatures = HashMap::new(); // This source contains no calls.
-        let before = sites(&native);
-        assert!(
-            optimize(&mut native, &signatures, &shared.metadata().constants)
-                .unwrap()
-                .folded_scalars
-                > 0
-        );
-        assert_eq!(sites(&native), before);
+        #[cfg(not(foster_bootstrap))]
+        {
+            let prepared = crate::native::prepare(&compilation).unwrap();
+            let mut native = prepared.functions()[0].ir().clone();
+            let signatures = HashMap::new(); // This source contains no calls.
+            let before = sites(&native);
+            assert!(
+                optimize(&mut native, &signatures, &shared.metadata().constants)
+                    .unwrap()
+                    .folded_scalars
+                    > 0
+            );
+            assert_eq!(sites(&native), before);
+        }
     }
 
     #[test]

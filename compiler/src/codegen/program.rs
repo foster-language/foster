@@ -55,6 +55,7 @@ pub struct Program {
 }
 
 impl Program {
+    #[cfg(not(foster_bootstrap))]
     pub(crate) fn instructions(
         &self,
         function: FunctionId,

@@ -30,6 +30,10 @@ The compiler depends on bytecode and host contracts. It does not depend on VM
 execution in production. The toolchain driver combines compilation and execution
 and exposes its orchestration API from `src/lib.rs` and `src/vm.rs`.
 
+The build-host bootstrap compiler generates bundled libraries using checking,
+shared SSA, and bytecode generation. Its build configuration excludes the native
+backend and Cranelift dependencies; the ordinary compiler includes both backends.
+
 Bytecode also owns the executable SSA representation and logical flow engine
 used by both the compiler and bytecode verifier. Keeping this shared validation
 code together prevents compilation and decoding from checking different contracts.

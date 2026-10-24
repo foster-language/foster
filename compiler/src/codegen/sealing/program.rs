@@ -9,7 +9,8 @@ use crate::hir::FunctionId;
 use std::collections::HashMap;
 /// Retain the compiler's first SSA graph instead of immediately de-SSA lowering it to bytecode.
 pub fn seal_program(mut construction: storage::Program) -> Result<SharedProgram, LowerError> {
-    let layouts = crate::compiler::profile::measure("shared.layouts", || {
+    // Both builds legalize and validate layouts; only native lowering retains the registry.
+    let _layouts = crate::compiler::profile::measure("shared.layouts", || {
         crate::codegen::layout::legalize(&mut construction)
     })
     .map_err(|e| LowerError(e.to_string()))?;
@@ -35,7 +36,8 @@ pub fn seal_program(mut construction: storage::Program) -> Result<SharedProgram,
                 .collect(),
             bodies: functions,
         }),
-        layouts,
+        #[cfg(not(foster_bootstrap))]
+        layouts: _layouts,
         drops_inserted: construction.drops_inserted,
         signatures,
         schemas,

@@ -508,6 +508,7 @@ pub struct PhysicalRegistry {
 impl PhysicalRegistry {
     /// Select erased field storage before allocation while retaining the logical
     /// schemas. This keeps a field's borrowed ABI stable across contract views.
+    #[cfg(not(foster_bootstrap))]
     pub(crate) fn build_with_erased_fields(
         logical: &Registry,
         target: TargetLayout,
