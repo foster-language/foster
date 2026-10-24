@@ -104,11 +104,6 @@ mod tests {
             crate::vm::run(&compilation).unwrap(),
             crate::vm::Value::Integer(42)
         );
-        #[cfg(not(foster_bootstrap))]
-        for optimize in [false, true] {
-            crate::native::compile_object(&compilation, crate::native::CompileOptions { optimize })
-                .unwrap();
-        }
     }
 
     #[test]

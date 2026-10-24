@@ -26,6 +26,15 @@ pub struct SharedProgram {
 }
 
 impl SharedProgram {
+    /// Immutable declarations and SSA bodies shared with backend preparation.
+    pub fn program(&self) -> &Arc<Program> {
+        &self.program
+    }
+    /// Logical layouts legalized and validated before backend lowering.
+    #[cfg(not(foster_bootstrap))]
+    pub fn layouts(&self) -> &Registry {
+        &self.layouts
+    }
     pub fn metadata(&self) -> &ProgramMetadata {
         &self.program.metadata
     }
@@ -41,15 +50,13 @@ impl SharedProgram {
     pub fn facts(&self, function: FunctionId) -> &FunctionFacts {
         &self.facts[&function]
     }
-    #[cfg(all(test, not(foster_bootstrap)))]
-    pub(crate) fn into_parts(
-        self,
-    ) -> (
-        Arc<Program>,
-        HashMap<FunctionId, Arc<FunctionFacts>>,
-        Registry,
-    ) {
-        (self.program, self.facts, self.layouts)
+    /// Flow evidence tied to this graph; backend revisions must rebuild affected entries.
+    pub fn all_facts(&self) -> &HashMap<FunctionId, Arc<FunctionFacts>> {
+        &self.facts
+    }
+    /// Original storage identities used when rebuilding flow for a backend graph revision.
+    pub fn write_bindings(&self, function: FunctionId) -> &HashMap<ir::Value, ir::Value> {
+        &self.write_bindings[&function]
     }
 
     /// All shared semantic passes run here, before either backend lowers SSA.
@@ -112,12 +119,6 @@ mod tests {
         for optimize in [true, false, true] {
             crate::vm::compile_with_options(&compilation, crate::vm::CompileOptions { optimize })
                 .unwrap();
-            #[cfg(not(foster_bootstrap))]
-            crate::native::prepare_with_options(
-                &compilation,
-                crate::native::CompileOptions { optimize },
-            )
-            .unwrap();
         }
         assert_eq!(before, format!("{:?}", baseline.functions()));
     }

@@ -388,5 +388,8 @@ func main() -> Int {
 }
 
 #[cfg(test)]
-#[path = "../../benchmarks/support/native_dispatch.rs"]
+mod boundary_tests;
+
+#[cfg(test)]
+#[path = "../../../benchmarks/support/native_dispatch.rs"]
 mod benchmark_sources;

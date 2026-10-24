@@ -7,9 +7,10 @@ fn unavailable_arguments_in_unreachable_blocks_use_the_callee_abi() {
     )
     .unwrap();
     let prepared = crate::native::prepare(&compilation).unwrap();
-    let (source_program, _, _) = crate::vm::compile_shared(&compilation)
+    let source_program = crate::vm::compile_shared(&compilation)
         .unwrap()
-        .into_parts();
+        .program()
+        .clone();
     let instance = prepared
         .instances
         .iter()
@@ -90,9 +91,10 @@ func main() -> Int {
     )
     .unwrap();
     let prepared = crate::native::prepare(&compilation).unwrap();
-    let (source_program, _, _) = crate::vm::compile_shared(&compilation)
+    let source_program = crate::vm::compile_shared(&compilation)
         .unwrap()
-        .into_parts();
+        .program()
+        .clone();
     let instance = &prepared
         .instances
         .iter()

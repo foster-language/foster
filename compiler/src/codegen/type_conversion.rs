@@ -11,7 +11,7 @@ use crate::types::{COPY_SLOT, DEINIT_SLOT, NominalTypeId, Type, TypeId, TypeInfo
 
 use crate::codegen::types::{ExecutableType as V, Specialization};
 
-pub(crate) const MAX_TYPE_DEPTH: usize = 64;
+pub const MAX_TYPE_DEPTH: usize = 64;
 
 pub(crate) enum StructuralViews {
     Erase,
@@ -63,7 +63,7 @@ impl Policy for Bytecode {
 pub(crate) struct Native;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct NestingLimit;
+pub struct NestingLimit;
 
 impl Policy for Native {
     type Error = NestingLimit;
@@ -219,7 +219,7 @@ pub(crate) fn convert<P: Policy>(
 }
 
 /// Native structural-dispatch classification, also used for top-level representation choice.
-pub(crate) fn record_uses_dynamic_dispatch(
+pub fn record_uses_dynamic_dispatch(
     hir: &PackageHir,
     information: &TypeInformation,
     record: RecordId,

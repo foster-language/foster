@@ -220,16 +220,13 @@ fn aggregate_argument_type(
     substitutions: &crate::codegen::types::Specialization,
 ) -> Result<crate::codegen::types::ExecutableType, FosterError> {
     specialized_executable_type(compilation, ty, substitutions, 1)?;
-    match crate::codegen::type_conversion::convert::<crate::codegen::type_conversion::Bytecode>(
+    Ok(crate::codegen::backend::bytecode_type(
         &compilation.hir,
         &compilation.types,
         ty,
         substitutions,
         0,
-    ) {
-        Ok(ty) => Ok(ty),
-        Err(never) => match never {},
-    }
+    ))
 }
 
 pub(super) fn specialized_executable_type(
@@ -238,8 +235,8 @@ pub(super) fn specialized_executable_type(
     substitutions: &crate::codegen::types::Specialization,
     depth: usize,
 ) -> Result<crate::codegen::types::ExecutableType, FosterError> {
-    use crate::codegen::type_conversion::{MAX_TYPE_DEPTH, Native, convert};
-    convert::<Native>(
+    use crate::codegen::backend::{MAX_TYPE_DEPTH, native_type};
+    native_type(
         &compilation.hir,
         &compilation.types,
         ty,
@@ -334,7 +331,7 @@ pub(super) fn record_uses_dynamic_dispatch(
     compilation: &Compilation,
     record: crate::hir::RecordId,
 ) -> bool {
-    crate::codegen::type_conversion::record_uses_dynamic_dispatch(
+    crate::codegen::backend::record_uses_dynamic_dispatch(
         &compilation.hir,
         &compilation.types,
         record,

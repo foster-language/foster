@@ -41,7 +41,7 @@ bytecode route uniquely performs common-expression elimination.
 
 ## Fewer block polls
 
-[Native legalization](../../compiler/src/native/legalize/function.rs) inserts a cancellation poll
+[Native legalization](../../compiler/native/src/native/legalize/function.rs) inserts a cancellation poll
 at every shared basic block. This is an observable runtime call, so Cranelift cannot simply
 discard it when an otherwise empty block is bypassed. The
 [runtime helper](../../runtime/src/host.rs) checks cooperative scheduling, cancellation, and
@@ -67,8 +67,8 @@ Fibonacci invocation. At input 35, that is 29,860,703 fewer polls.
 
 ## Fewer temporary storage homes
 
-[Native preparation](../../compiler/src/native/program.rs) collects a storage home for every
-hinted native value. [Machine lowering](../../compiler/src/native/lowering.rs) allocates stack
+[Native preparation](../../compiler/native/src/native/program.rs) collects a storage home for every
+hinted native value. [Machine lowering](../../compiler/native/src/native/lowering.rs) allocates stack
 slots for those homes and stores incoming block parameters and instruction results into them.
 The current scheme backs many ordinary scalar values with memory, even when they never need
 an address. Consequently, extra logical temporaries can survive as stack traffic in machine code.

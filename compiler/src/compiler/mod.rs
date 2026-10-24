@@ -14,7 +14,7 @@ use crate::package::Package;
 ///
 /// Analysis remains readable but cannot be mutated while retaining this guarantee.
 /// ```compile_fail
-/// fn invalidate(mut checked: foster_compiler::compiler::Compilation) {
+/// fn invalidate(mut checked: foster_compiler_core::compiler::Compilation) {
 ///     checked.diagnostics.clear();
 /// }
 /// ```
@@ -40,7 +40,7 @@ pub struct CompilationData {
 }
 impl Compilation {
     /// Reuse verified, immutable SSA across backends and optimization modes.
-    pub(crate) fn shared_program(
+    pub fn shared_program(
         &self,
         optimize: bool,
     ) -> Result<std::sync::Arc<crate::codegen::shared::SharedProgram>, FosterError> {
@@ -76,8 +76,8 @@ impl std::ops::Deref for Compilation {
 }
 /// Editor analysis, potentially containing recovery stubs; never executable.
 /// ```compile_fail
-/// fn emit(recovered: &foster_compiler::compiler::RecoveryCompilation) {
-///     let _ = foster_compiler::vm::compile(recovered);
+/// fn emit(recovered: &foster_compiler_core::compiler::RecoveryCompilation) {
+///     let _ = foster_compiler_core::vm::compile(recovered);
 /// }
 /// ```
 #[derive(Debug)]

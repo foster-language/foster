@@ -27,8 +27,8 @@ fn toolchain_version(rustc: &OsStr) -> Result<Vec<u8>, FosterError> {
 const LIBRARY: &str = "libfoster_native_runtime.rlib";
 // Keep runtime exports in the object pulled in by initialization. The Foster object is passed as
 // a linker argument, which some host linkers process after Rust's archives.
-const MANIFEST: &str = include_str!("../../../runtime/native-build.toml");
-const LOCKFILE: &str = include_str!("../../../runtime/native-build.lock");
+const MANIFEST: &str = include_str!("../../../../runtime/native-build.toml");
+const LOCKFILE: &str = include_str!("../../../../runtime/native-build.lock");
 
 #[derive(serde::Serialize, serde::Deserialize)]
 struct Dependencies {

@@ -96,9 +96,10 @@ libraries into consumer-defined implementations are supported.
 
 Building the Rust toolchain checks and compiles the Foster library into two embedded `.flib`
 artifacts: the minimal bootstrap surface used without library imports, and the complete
-`core`/`std` surface. A build-host crate compiles the same compiler sources to generate these
-artifacts without depending on the bundle it is producing. Compiler and library source changes
-regenerate them; no installed library files or writable runtime cache are required.
+`core`/`std` surface. A build-host crate compiles the same compiler-core sources to generate these
+artifacts without depending on the bundle it is producing. Core and library source changes
+regenerate them; native-backend source changes do not. No installed library files or writable
+runtime cache are required.
 
 Ordinary compilation and LSP analysis decode and validate each artifact once per process, share
 its immutable code, and mount checked declaration interfaces. Ordinary library bodies are not

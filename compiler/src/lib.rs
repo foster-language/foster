@@ -1,4 +1,4 @@
-//! Foster parsing, semantic analysis, and executable code generation.
+//! Foster parsing, semantic analysis, shared SSA, and bytecode generation.
 #![allow(clippy::result_large_err)]
 pub mod ast;
 pub mod block;
@@ -13,8 +13,6 @@ pub mod hir;
 pub mod intrinsics;
 pub mod lexer;
 pub mod library;
-#[cfg(not(foster_bootstrap))]
-pub mod native;
 pub mod ownership;
 pub mod package;
 pub mod parser;

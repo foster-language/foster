@@ -72,14 +72,14 @@ pub(crate) fn run_shared(
     }
     Ok(changed)
 }
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct Report {
     pub folded_scalars: usize,
 }
 
 /// The caller owns the working graph; publish it only after this succeeds.
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 pub(crate) fn optimize(
     function: &mut ir::Function,
     signatures: &HashMap<FunctionId, ir::Signature>,
@@ -101,7 +101,7 @@ enum Scalar {
 }
 
 impl Scalar {
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     fn constant(self) -> ir::Constant {
         match self {
             Self::Int(value) => ir::Constant::Integer(value),
@@ -260,7 +260,7 @@ fn expose_alias(function: &ir::Function, exposed: &mut HashSet<u16>, left: Value
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 fn fold_scalars(function: &mut ir::Function, constants: &[Constant]) -> usize {
     let exposed = exposed_homes(function);
     let mut folded = 0;
@@ -434,7 +434,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn shared_pass_folds_portable_and_native_ssa_without_moving_sites() {
+    fn shared_pass_folds_portable_ssa_without_moving_sites() {
         let compilation = crate::compile("func main() -> Int { (20 + 22) * 2 }").unwrap();
         let shared = crate::vm::compile_shared(&compilation).unwrap();
         let id = shared.metadata().main.unwrap();
@@ -471,21 +471,6 @@ mod tests {
             .folded_scalars,
             0
         );
-
-        #[cfg(not(foster_bootstrap))]
-        {
-            let prepared = crate::native::prepare(&compilation).unwrap();
-            let mut native = prepared.functions()[0].ir().clone();
-            let signatures = HashMap::new(); // This source contains no calls.
-            let before = sites(&native);
-            assert!(
-                optimize(&mut native, &signatures, &shared.metadata().constants)
-                    .unwrap()
-                    .folded_scalars
-                    > 0
-            );
-            assert_eq!(sites(&native), before);
-        }
     }
 
     #[test]

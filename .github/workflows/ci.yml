@@ -84,7 +84,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: target/native-runtime-cache
-          key: native-runtime-${{ runner.os }}-${{ steps.toolchain.outputs.cachekey }}-${{ hashFiles('runtime/**', 'host/src/**', 'bytecode/src/native/abi.rs', 'compiler/src/native/runtime*.rs') }}
+          key: native-runtime-${{ runner.os }}-${{ steps.toolchain.outputs.cachekey }}-${{ hashFiles('runtime/**', 'host/src/**', 'bytecode/src/native/abi.rs', 'compiler/native/src/native/runtime*.rs') }}
           restore-keys: native-runtime-${{ runner.os }}-${{ steps.toolchain.outputs.cachekey }}-
       - name: Component unit tests and examples
         run: cargo test ${{ needs.changes.outputs.packages }} --lib --bins --examples

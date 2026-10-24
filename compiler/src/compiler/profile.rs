@@ -99,6 +99,13 @@ fn collect<T>(work: impl FnOnce() -> T) -> (T, Report) {
     (result, report)
 }
 
+/// Collect counters across compiler/backend boundaries without enabling stderr reports.
+#[cfg(feature = "test-support")]
+pub fn collect_counters<T>(work: impl FnOnce() -> T) -> (T, BTreeMap<&'static str, usize>) {
+    let (result, report) = collect(work);
+    (result, report.counters)
+}
+
 /// Profile a compiler API call; nested calls contribute to their outer report.
 pub fn compilation<T>(
     operation: &str,
@@ -245,26 +252,6 @@ mod tests {
         .join()
         .unwrap();
         assert!(ACTIVE.with(|active| active.borrow().is_none()));
-    }
-
-    #[cfg(not(foster_bootstrap))]
-    #[test]
-    fn native_preparation_analyzes_each_body_once_across_specializations() {
-        let compilation = crate::compile("func identity<T>(value: T) -> T { value }\nfunc main() -> Int { assert(identity(true))\nassert(identity(1.5) == 1.5)\nidentity(42) }").unwrap();
-        let (prepared, report) = collect(|| crate::native::prepare(&compilation));
-        let prepared = prepared.unwrap();
-        let bodies = prepared
-            .functions()
-            .iter()
-            .map(|function| function.source_function())
-            .collect::<std::collections::HashSet<_>>();
-        assert!(prepared.functions().len() > bodies.len());
-        assert!(!report.counters.contains_key("native.flow_analysis"));
-        let shared = crate::vm::compile_shared(&compilation).unwrap();
-        assert_eq!(
-            report.counters["shared.flow_analysis"],
-            shared.functions().len()
-        );
     }
 
     #[test]

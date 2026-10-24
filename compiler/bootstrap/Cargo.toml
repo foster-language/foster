@@ -7,7 +7,7 @@ publish = false
 
 # Compile the same implementation for the build host, without depending on its
 # generated library. This breaks the compiler -> bundled library -> compiler cycle.
-# The foster_bootstrap configuration excludes the native backend and Cranelift.
+# The shared core has no dependency on the separate native backend or Cranelift.
 [lib]
 path = "../src/lib.rs"
 test = false

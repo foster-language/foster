@@ -77,7 +77,7 @@ fn clone_artifact(artifact: &ObjectArtifact) -> ObjectArtifact {
 #[test]
 #[ignore = "builds native workload executables and measures runtime; run alone in release mode"]
 fn profile_native_runtime() {
-    let root = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/.."));
+    let root = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));
     let output = root.join("target/native-runtime-profile");
     fs::create_dir_all(&output).unwrap();
     let workloads = [

@@ -85,50 +85,50 @@ fn main() {{
 // statements; edits to those statements must also update this assembly path.
 // Safety comments in the embedded files describe both builds' shared ABI contract.
 fn runtime_source() -> String {
-    let source = include_str!("../../../runtime/src/lib.rs")
+    let source = include_str!("../../../../runtime/src/lib.rs")
         .replace("\r\n", "\n")
         .replace(
             "use foster_host::process as process_runtime;",
             &format!(
                 "mod process_runtime {{\n{}\n}}",
-                include_str!("../../../host/src/process.rs")
+                include_str!("../../../../host/src/process.rs")
             ),
         )
         .replace(
             "include!(\"process.rs\");",
-            include_str!("../../../runtime/src/process.rs"),
+            include_str!("../../../../runtime/src/process.rs"),
         )
         .replace(
             "use foster_host::foreign as c_bridge;",
             &format!(
                 "mod c_bridge {{\n{}\n}}",
-                include_str!("../../../host/src/foreign.rs")
+                include_str!("../../../../host/src/foreign.rs")
                     .replace("\r\n", "\n")
                     .replace(
                         "#[path = \"callbacks.rs\"]\npub mod callbacks;",
                         &format!(
                             "pub mod callbacks {{\n{}\n}}",
-                            include_str!("../../../host/src/callbacks.rs")
+                            include_str!("../../../../host/src/callbacks.rs")
                         ),
                     )
             ),
         )
         .replace(
             "include!(\"foreign.rs\");",
-            include_str!("../../../runtime/src/foreign.rs"),
+            include_str!("../../../../runtime/src/foreign.rs"),
         )
         .replace(
             "use foster_host::remote as remote_lifecycle;",
             &format!(
                 "mod remote_lifecycle {{\n{}\n}}",
-                include_str!("../../../host/src/remote.rs")
+                include_str!("../../../../host/src/remote.rs")
             ),
         )
         .replace(
             "pub use foster_host as services;",
             &format!(
                 "pub mod services {{\n{}\n}}",
-                include_str!("../../../host/src/lib.rs")
+                include_str!("../../../../host/src/lib.rs")
                     .replace("pub mod process;", "")
                     .replace("pub mod remote;", "")
                     .replace("pub mod foreign;", "")
@@ -136,29 +136,29 @@ fn runtime_source() -> String {
                         "mod provider;",
                         &format!(
                             "mod provider {{\n{}\n}}",
-                            include_str!("../../../host/src/provider.rs")
+                            include_str!("../../../../host/src/provider.rs")
                         )
                     )
                     .replace(
                         "mod readiness;",
                         &format!(
                             "mod readiness {{\n{}\n}}",
-                            include_str!("../../../host/src/readiness.rs")
+                            include_str!("../../../../host/src/readiness.rs")
                         )
                     )
             ),
         )
         .replace(
             "include!(\"host.rs\");",
-            include_str!("../../../runtime/src/host.rs"),
+            include_str!("../../../../runtime/src/host.rs"),
         )
         .replace(
             "include!(\"equality.rs\");",
-            include_str!("../../../runtime/src/equality.rs"),
+            include_str!("../../../../runtime/src/equality.rs"),
         );
     let source = source.replace(
         "include!(\"version.rs\");",
-        include_str!("../../../runtime/src/version.rs"),
+        include_str!("../../../../runtime/src/version.rs"),
     );
     source + &abi::runtime_assertions()
 }
@@ -412,7 +412,7 @@ fn main() {"#)
     #[test]
     fn cancellation_polls_reuse_failure_status_and_release_live_frames() {
         let compilation = crate::compile(include_str!(
-            "../../../benchmarks/native_runtime/record_reuse.fos"
+            "../../../../benchmarks/native_runtime/record_reuse.fos"
         ))
         .unwrap();
         let temporary = TemporaryDirectory::create().unwrap();
@@ -514,7 +514,7 @@ check_reclamation();
     #[test]
     fn sequence_collection_contract_results_release_native_allocations() {
         check_contract_result_allocations(
-            include_str!("../../../tests/fixtures/programs/sequence_collections.fos"),
+            include_str!("../../../../tests/fixtures/programs/sequence_collections.fos"),
             "42",
             "collections",
         );
@@ -523,7 +523,7 @@ check_reclamation();
     #[test]
     fn owned_contract_results_release_native_allocations() {
         check_contract_result_allocations(
-            include_str!("../../../tests/fixtures/programs/contract_owned_results.fos"),
+            include_str!("../../../../tests/fixtures/programs/contract_owned_results.fos"),
             "viewed\ndrop wide\nreturned\ndrop pair\ndrop envelope\ndrop envelope\n42",
             "owned-contracts",
         );
@@ -532,7 +532,7 @@ check_reclamation();
     #[test]
     fn mixed_interface_joins_preserve_dispatch_and_release_native_allocations() {
         let compilation = crate::compile(include_str!(
-            "../../../tests/fixtures/programs/interface_join.fos"
+            "../../../../tests/fixtures/programs/interface_join.fos"
         ))
         .unwrap();
         assert_eq!(
@@ -857,7 +857,7 @@ fn main() {
     #[test]
     fn virtual_threads_share_one_worker_and_suspend_native_stacks() {
         let compilation = crate::compile(include_str!(
-            "../../../tests/fixtures/programs/native_virtual_threads.fos"
+            "../../../../tests/fixtures/programs/native_virtual_threads.fos"
         ))
         .unwrap();
         let prepared = prepare(&compilation).unwrap();

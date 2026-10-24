@@ -287,8 +287,8 @@ name = "measure_backends"
 path = "tools/profiling/measure_backends.rs"
 
 [workspace]
-members = ["runtime", "host", "bytecode", "vm", "compiler", "compiler/bootstrap"]
-default-members = [".", "runtime", "host", "bytecode", "vm", "compiler"]
+members = ["runtime", "host", "bytecode", "vm", "compiler", "compiler/core", "compiler/native", "compiler/bootstrap"]
+default-members = [".", "runtime", "host", "bytecode", "vm", "compiler", "compiler/core", "compiler/native"]
 resolver = "3"
 
 # Integration tests execute the compiler and VM extensively, including native code generation.

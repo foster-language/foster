@@ -665,7 +665,7 @@ fn specialize_type_branches(
             {
                 let source = source.specialize(&instance.substitutions);
                 if let E::Record { record, .. } = &source
-                    && crate::codegen::type_conversion::record_uses_dynamic_dispatch(
+                    && crate::codegen::backend::record_uses_dynamic_dispatch(
                         &environment.compilation.hir,
                         &environment.compilation.types,
                         *record,

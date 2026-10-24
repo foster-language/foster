@@ -5,9 +5,9 @@ pub(super) fn retained_reference_flow(
     shared: &crate::codegen::shared::SharedProgram,
 ) -> Result<(std::sync::Arc<Program>, specialization::FlowFacts), FosterError> {
     use crate::codegen::flow::{Site, ValueFact};
-    let mut program = shared.program.clone();
-    let mut schemas = shared.schemas.clone();
-    let mut facts = shared.facts.clone();
+    let mut program = shared.program().clone();
+    let mut schemas = shared.schemas().clone();
+    let mut facts = shared.all_facts().clone();
     for _ in 0..=schemas.len() {
         let mut changed = false;
         for (id, body) in &program.bodies {
@@ -175,7 +175,7 @@ pub(super) fn retained_reference_flow(
                 &schemas,
                 &schemas[id],
                 body,
-                &shared.write_bindings[id],
+                shared.write_bindings(*id),
             )?;
             facts.insert(*id, std::sync::Arc::new(evidence));
         }
@@ -263,7 +263,8 @@ pub(super) fn resolve_reference_results(
 
 #[cfg(test)]
 mod tests {
-    const OWNED: &str = include_str!("../../../tests/fixtures/programs/contract_owned_results.fos");
+    const OWNED: &str =
+        include_str!("../../../../tests/fixtures/programs/contract_owned_results.fos");
 
     #[test]
     fn owned_contract_results_keep_original_items() {
@@ -303,7 +304,7 @@ mod tests {
     }
 
     const SOURCE: &str =
-        include_str!("../../../tests/fixtures/programs/contract_reference_results.fos");
+        include_str!("../../../../tests/fixtures/programs/contract_reference_results.fos");
 
     #[test]
     fn contract_reference_results_preserve_returned_storage() {

@@ -1,0 +1,21 @@
+[package]
+name = "foster-compiler-native"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+foster-compiler-core = { path = "../core" }
+foster-bytecode = { path = "../../bytecode" }
+cranelift-codegen = "0.134.3"
+cranelift-frontend = "0.134.3"
+cranelift-module = "0.134.3"
+cranelift-native = "0.134.3"
+cranelift-object = "0.134.3"
+la-arena = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+foster-vm = { path = "../../vm" }
+foster-compiler-core = { path = "../core", features = ["test-support"] }

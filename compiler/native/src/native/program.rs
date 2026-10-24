@@ -109,7 +109,7 @@ fn prepare_shared(
     let (program, retained_facts) = reference_results::retained_reference_flow(shared)?;
     let facts = &retained_facts;
     let mut layouts =
-        crate::compiler::profile::measure("native.clone_layouts", || shared.layouts.clone());
+        crate::compiler::profile::measure("native.clone_layouts", || shared.layouts().clone());
     if let Some(record) = program.metadata.string_record {
         layouts.instantiate_type(&ExecutableType::Record {
             record,
@@ -446,7 +446,7 @@ mod tests {
     #[test]
     fn contract_storage_is_planned_from_portable_ssa_before_lowering() {
         let compilation = crate::compile(include_str!(
-            "../../../tests/fixtures/programs/contract_owned_results.fos"
+            "../../../../tests/fixtures/programs/contract_owned_results.fos"
         ))
         .unwrap();
         for optimize in [false, true] {
@@ -519,7 +519,7 @@ mod tests {
     #[test]
     fn native_verification_rejects_unplanned_contract_views() {
         let compilation = crate::compile(include_str!(
-            "../../../tests/fixtures/programs/contract_owned_results.fos"
+            "../../../../tests/fixtures/programs/contract_owned_results.fos"
         ))
         .unwrap();
         for optimize in [false, true] {
@@ -553,10 +553,10 @@ mod tests {
     #[test]
     fn native_cleanup_preserves_vm_and_avoids_nonaddressable_stack_homes() {
         for (index, source) in [
-            include_str!("../../../benchmarks/fibonacci.fos"),
-            include_str!("../../../benchmarks/native_runtime/branch_counter.fos"),
-            include_str!("../../../benchmarks/native_runtime/record_reuse.fos"),
-            include_str!("../../../benchmarks/native_runtime/list_push.fos"),
+            include_str!("../../../../benchmarks/fibonacci.fos"),
+            include_str!("../../../../benchmarks/native_runtime/branch_counter.fos"),
+            include_str!("../../../../benchmarks/native_runtime/record_reuse.fos"),
+            include_str!("../../../../benchmarks/native_runtime/list_push.fos"),
         ]
         .into_iter()
         .enumerate()
@@ -594,11 +594,11 @@ mod tests {
             prepare_with_options(&compilation, CompileOptions { optimize: true }).unwrap();
         assert!(std::sync::Arc::ptr_eq(
             &baseline.program,
-            &baseline.canonical.program
+            baseline.canonical.program()
         ));
         assert!(!std::sync::Arc::ptr_eq(
             &optimized.program,
-            &optimized.canonical.program
+            optimized.canonical.program()
         ));
         assert!(optimized.functions.len() < baseline.functions.len());
         let main = optimized

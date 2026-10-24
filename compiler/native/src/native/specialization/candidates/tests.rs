@@ -3,9 +3,9 @@ use super::*;
 #[test]
 fn indexed_candidates_match_reference_selection_and_order() {
     for source in [
-        include_str!("../../../../../tests/fixtures/programs/contract_owned_results.fos")
+        include_str!("../../../../../../tests/fixtures/programs/contract_owned_results.fos")
             .to_owned(),
-        include_str!("../../../../../tests/fixtures/programs/contract_reference_results.fos")
+        include_str!("../../../../../../tests/fixtures/programs/contract_reference_results.fos")
             .to_owned(),
         crate::native::benchmark_sources::candidates(6),
     ] {

@@ -56,7 +56,7 @@ pub struct Program {
 
 impl Program {
     #[cfg(not(foster_bootstrap))]
-    pub(crate) fn instructions(
+    pub fn instructions(
         &self,
         function: FunctionId,
     ) -> impl Iterator<Item = &ir::PortableInstruction> {

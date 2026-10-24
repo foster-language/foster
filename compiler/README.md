@@ -1,18 +1,27 @@
 # Foster compiler
 
-`foster-compiler` owns parsing, name resolution, type/effect/ownership checking,
-compiled libraries, shared optimization, and VM/native code generation. Executable
-contracts are shared with [bytecode](../bytecode/README.md); platform contracts
-come from [host](../host/README.md). VM execution is a development dependency.
+`foster-compiler` exposes the compiler API through `facade.rs`. Its implementation
+has two dependencies:
 
-[`bootstrap/`](bootstrap/README.md) builds the compiler used to produce the embedded
-standard library, excluding the native backend and Cranelift. Keep its non-native
-dependencies aligned with this crate when changing the compiler.
+- `foster-compiler-core` (`core/Cargo.toml`, shared source in `src/`) owns parsing,
+  checking, compiled libraries, shared SSA/optimization, and bytecode generation.
+- `foster-compiler-native` (`native/`) consumes checked compilations and immutable
+  shared SSA to plan layouts, specialize, lower, verify, and emit native objects.
+  Cranelift is confined to this crate.
+
+[`bootstrap/`](bootstrap/README.md) compiles the core sources without their generated
+library. `core/build.rs` uses it to generate the bundles embedded by the core.
+Native source edits rebuild the backend without rebuilding bootstrap or those
+bundles. The driver still regenerates its native formatter when its compiler changes.
+
+Executable contracts come from [bytecode](../bytecode/README.md) and platform
+contracts from [host](../host/README.md). VM execution is a development dependency.
 
 From the repository root:
 
 ```text
-cargo test -p foster-compiler --lib
+cargo test -p foster-compiler-core -p foster-compiler-native --lib
+cargo test -p foster-compiler
 python tools/integration_tests.py --suite language --jobs 2
 cargo test --test backend_parity
 ```

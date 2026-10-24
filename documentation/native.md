@@ -267,7 +267,7 @@ Different closure environments join at a uniform callable ABI, and erased/concre
 at an erased ABI. Native edge legalization inserts conversions before parallel argument assignment
 and releases the old owners on the affected edge. Storage hints remain ownership locations during
 legalization, rather than identities for type inference.
-`compiler/src/native/inference.rs` owns the fixed-point solver; its `instructions` and `representations`
+`compiler/native/src/native/inference.rs` owns the fixed-point solver; its `instructions` and `representations`
 modules contain result-layout rules and layout/ABI helpers. Empty storage tokens receive layouts
 from their receiving blocks or callee ABIs, without constraining live producers backwards.
 

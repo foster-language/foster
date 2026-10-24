@@ -2,8 +2,8 @@ use std::{env, fs, path::PathBuf};
 
 fn main() {
     println!("cargo:rustc-check-cfg=cfg(foster_bootstrap)");
-    println!("cargo:rerun-if-changed=../library");
-    println!("cargo:rerun-if-changed=src");
+    println!("cargo:rerun-if-changed=../../library");
+    println!("cargo:rerun-if-changed=../src");
     let output = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo supplies OUT_DIR"));
     std::thread::Builder::new()
         .name("foster-library-build".into())

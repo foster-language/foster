@@ -241,7 +241,7 @@ Run the opt-in profiler alone, using release compilation:
 
 ```powershell
 $env:FOSTER_NATIVE_CACHE_DIR = Join-Path (Get-Location) 'target/optimizer-test-cache'
-cargo test --release -p foster-compiler --lib native::runtime::profiling::profile_native_runtime -- --ignored --exact --nocapture
+cargo test --release -p foster-compiler-native --lib native::runtime::profiling::profile_native_runtime -- --ignored --exact --nocapture
 ```
 
 It builds the fixtures in `benchmarks/native_runtime/`, verifies reduced inputs on the VM,

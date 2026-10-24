@@ -1373,8 +1373,9 @@ impl Package {
 pub fn embedded_source_path(module: &str) -> Option<Utf8PathBuf> {
     let relative = format!("library/{}.fos", module.replace('.', "/"));
     let source_tree = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("compiler crate is inside the workspace")
+        .ancestors()
+        .nth(2)
+        .expect("compiler implementation crate is inside the compiler directory")
         .join(&relative);
     if source_tree.is_file() {
         return Some(source_tree);

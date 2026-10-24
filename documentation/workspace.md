@@ -1,6 +1,6 @@
 # Rust workspace
 
-Foster has six primary Rust packages and a build-host bootstrap compiler in one
+Foster has eight primary Rust packages and a build-host bootstrap compiler in one
 repository. The installed command is `foster`; the other primary packages expose
 reusable implementation libraries.
 
@@ -13,7 +13,9 @@ packages, editor integration, component tests, benchmarks, and research.
 | Package | Source | Responsibility |
 | --- | --- | --- |
 | `foster` | `src/` | Toolchain driver: commands, project discovery and dependency resolution, formatting, executable packaging, documentation, language server, debugger, and C bridge builds |
-| `foster-compiler` | `compiler/src/` | Parsing, name resolution, type/effect/ownership checking, compiled libraries, optimization, and bytecode/native generation |
+| `foster-compiler` | `compiler/facade.rs` | Compiler API combining shared compilation with native generation |
+| `foster-compiler-core` | `compiler/src/`, manifest in `compiler/core/` | Parsing, checking, compiled libraries, shared SSA/optimization, and bytecode generation |
+| `foster-compiler-native` | `compiler/native/src/` | Native specialization, layout planning, verification, Cranelift emission, and executable linking |
 | `foster-vm` | `vm/src/` | Execution state, values, builtin handlers, and bytecode execution |
 | `foster-bytecode` | `bytecode/src/` | Executable identities and types, instructions, metadata, intrinsic contracts, encoding/decoding, linking, and validation |
 | `foster-native-runtime` | `runtime/src/` | Runtime support linked into native Foster executables |
@@ -26,13 +28,16 @@ The VM depends on bytecode and host services. Neither bytecode nor host services
 has a production dependency on the compiler or toolchain driver. The native
 runtime depends on host services.
 
-The compiler depends on bytecode and host contracts. It does not depend on VM
+The compiler core depends on bytecode and host contracts. It does not depend on VM
 execution in production. The toolchain driver combines compilation and execution
 and exposes its orchestration API from `src/lib.rs` and `src/vm.rs`.
 
-The build-host bootstrap compiler generates bundled libraries using checking,
-shared SSA, and bytecode generation. Its build configuration excludes the native
-backend and Cranelift dependencies; the ordinary compiler includes both backends.
+The native backend depends on the core's checked compilation and read-only shared
+SSA interfaces. The core and build-host bootstrap compiler have no dependency on
+the native backend or Cranelift. Bootstrap compiles the same core source without
+its generated library; the core build script generates and embeds those bundles.
+Native-only edits leave bootstrap and bundled libraries unchanged. The driver still
+uses the native compiler to build its embedded native formatter.
 
 Bytecode also owns the executable SSA representation and logical flow engine
 used by both the compiler and bytecode verifier. Keeping this shared validation
@@ -76,7 +81,7 @@ python tools/integration_tests.py --suite language runtime --jobs 2
 cargo fmt --all -- --check
 ```
 
-The workspace default members include all six packages. Existing CLI commands,
+The workspace default members include all eight primary packages. Existing CLI commands,
 Foster package layout, and executable formats are unchanged. Native runtime source
 assembly follows the owning packages when producing its cached standalone runtime.
 

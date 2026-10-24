@@ -628,13 +628,17 @@ dependencies = [
 name = "foster-compiler"
 version = "0.1.0"
 dependencies = [
+ "foster-compiler-core",
+ "foster-compiler-native",
+ "foster-vm",
+]
+
+[[package]]
+name = "foster-compiler-core"
+version = "0.1.0"
+dependencies = [
  "ariadne",
  "camino",
- "cranelift-codegen",
- "cranelift-frontend",
- "cranelift-module",
- "cranelift-native",
- "cranelift-object",
  "foster-bootstrap",
  "foster-bytecode",
  "foster-host",
@@ -643,6 +647,23 @@ dependencies = [
  "serde",
  "serde_json",
  "walkdir",
+]
+
+[[package]]
+name = "foster-compiler-native"
+version = "0.1.0"
+dependencies = [
+ "cranelift-codegen",
+ "cranelift-frontend",
+ "cranelift-module",
+ "cranelift-native",
+ "cranelift-object",
+ "foster-bytecode",
+ "foster-compiler-core",
+ "foster-vm",
+ "la-arena",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

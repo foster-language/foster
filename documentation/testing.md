@@ -76,7 +76,7 @@ replacement for compile-pass/compile-fail, runtime, and backend-parity coverage.
 
 ## Native text ownership
 
-`cargo test -p foster-compiler --lib managed_text_and_arguments_release_all_native_allocations` builds native
+`cargo test -p foster-compiler-native --lib managed_text_and_arguments_release_all_native_allocations` builds native
 executables with test-only allocation accounting. It exercises argument import, string/byte
 storage, records, symbols, closures, remote results, and branch cleanup in both optimization modes, then checks
 that all tracked native allocations have been released after the entry result is destroyed.
